@@ -1,4 +1,5 @@
 """PVEWatch main entrypoint."""
+
 import logging
 import os
 import signal
@@ -27,23 +28,37 @@ logging.basicConfig(
 log = logging.getLogger("pvewatch")
 
 _DAY_TO_DOW = {
-    "monday": "mon", "tuesday": "tue", "wednesday": "wed",
-    "thursday": "thu", "friday": "fri", "saturday": "sat", "sunday": "sun",
+    "monday": "mon",
+    "tuesday": "tue",
+    "wednesday": "wed",
+    "thursday": "thu",
+    "friday": "fri",
+    "saturday": "sat",
+    "sunday": "sun",
 }
 
 
 def _ensure_cluster(conn: sqlite3.Connection, settings: Settings) -> str:
     """Return cluster_id, creating the row if it does not exist."""
-    row = conn.execute("SELECT id FROM clusters WHERE host = ? AND node = ?",
-                       (settings.pve_host, settings.pve_node)).fetchone()
+    row = conn.execute(
+        "SELECT id FROM clusters WHERE host = ? AND node = ?", (settings.pve_host, settings.pve_node)
+    ).fetchone()
     if row:
         return row["id"]
     cluster_id = str(uuid4())
     conn.execute(
         "INSERT INTO clusters (id, name, host, port, node, token_id, token_secret, created_at) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        (cluster_id, settings.pve_node, settings.pve_host, settings.pve_port,
-         settings.pve_node, settings.pve_token_id, settings.pve_token_secret, int(time.time())),
+        (
+            cluster_id,
+            settings.pve_node,
+            settings.pve_host,
+            settings.pve_port,
+            settings.pve_node,
+            settings.pve_token_id,
+            settings.pve_token_secret,
+            int(time.time()),
+        ),
     )
     conn.commit()
     kv_set(conn, "node", settings.pve_node)
@@ -54,9 +69,7 @@ def _poll_cycle(client: ProxmoxClient, conn: sqlite3.Connection, cluster_id: str
     refresh_vm_names(client, conn, cluster_id)
     failed = poll_backup_tasks(client, conn, cluster_id, settings)
     for task in failed:
-        vm_name_row = conn.execute(
-            "SELECT vm_name FROM backup_results WHERE upid = ?", (task.upid,)
-        ).fetchone()
+        vm_name_row = conn.execute("SELECT vm_name FROM backup_results WHERE upid = ?", (task.upid,)).fetchone()
         vm_name = vm_name_row["vm_name"] if vm_name_row else None
         send_backup_failure_alert(conn, settings, task, vm_name)
     poll_storage(client, conn, cluster_id, settings)

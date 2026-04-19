@@ -1,4 +1,5 @@
 """Backup task poller: reads new vzdump tasks, stores results, triggers alerts."""
+
 import logging
 import sqlite3
 import time
@@ -173,9 +174,7 @@ def refresh_vm_names(
     avoid duplicate rows when called multiple times on startup.
     """
     now = int(time.time())
-    last = conn.execute(
-        "SELECT MAX(sampled_at) FROM vm_states WHERE cluster_id = ?", (cluster_id,)
-    ).fetchone()[0]
+    last = conn.execute("SELECT MAX(sampled_at) FROM vm_states WHERE cluster_id = ?", (cluster_id,)).fetchone()[0]
     if last and (now - last) < 60:
         return
 
@@ -188,10 +187,10 @@ def refresh_vm_names(
     for vm in vms:
         conn.execute(
             """
-            INSERT INTO vm_states (id, cluster_id, vmid, vm_name, status, vm_type, sampled_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO vm_states (id, cluster_id, vmid, vm_name, status, vm_type, node, sampled_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (str(uuid4()), cluster_id, vm.vmid, vm.name, vm.status, vm.vm_type, now),
+            (str(uuid4()), cluster_id, vm.vmid, vm.name, vm.status, vm.vm_type, vm.node, now),
         )
     conn.commit()
     log.debug("Refreshed %d VM names", len(vms))

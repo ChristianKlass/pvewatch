@@ -1,4 +1,5 @@
 """Proxmox API client wrapping proxmoxer."""
+
 import logging
 import re
 import time
@@ -16,8 +17,8 @@ class TaskInfo:
     upid: str
     vmid: int
     node: str
-    status: str        # 'running' | 'stopped'
-    exit_status: str   # 'OK' | error string | '' if running
+    status: str  # 'running' | 'stopped'
+    exit_status: str  # 'OK' | error string | '' if running
     start_time: int
     end_time: int | None
     duration_sec: int | None
@@ -29,13 +30,14 @@ class StorageInfo:
     storage_id: str
     total_bytes: int
     used_bytes: int
+    node: str = ""
 
 
 @dataclass
 class VMInfo:
     vmid: int
     name: str
-    status: str   # 'running' | 'stopped' | 'paused'
+    status: str  # 'running' | 'stopped' | 'paused'
     vm_type: str  # 'qemu' | 'lxc'
     node: str
 
@@ -121,17 +123,25 @@ class ProxmoxClient:
         return _parse_batch_log(log_text, upid, node, batch_start)
 
     def get_storage(self) -> list[StorageInfo]:
-        storages = self._api.nodes(self._node).storage.get()
         result = []
-        for s in storages:
-            total = s.get("total", 0)
-            used = s.get("used", 0)
-            if total and total > 0:
-                result.append(StorageInfo(
-                    storage_id=s["storage"],
-                    total_bytes=total,
-                    used_bytes=used,
-                ))
+        for node in self._node_names():
+            try:
+                storages = self._api.nodes(node).storage.get()
+            except Exception as exc:
+                log.warning("Could not fetch storage from node %s: %s", node, exc)
+                continue
+            for s in storages:
+                total = s.get("total", 0)
+                used = s.get("used", 0)
+                if total and total > 0:
+                    result.append(
+                        StorageInfo(
+                            storage_id=s["storage"],
+                            total_bytes=total,
+                            used_bytes=used,
+                            node=node,
+                        )
+                    )
         return result
 
     def get_vms(self) -> list[VMInfo]:
@@ -139,22 +149,23 @@ class ProxmoxClient:
         try:
             resources = self._api.cluster.resources.get(type="vm")
         except Exception:
-            resources = (
-                [dict(r, type="qemu") for r in self._api.nodes(self._node).qemu.get()]
-                + [dict(r, type="lxc") for r in self._api.nodes(self._node).lxc.get()]
-            )
+            resources = [dict(r, type="qemu") for r in self._api.nodes(self._node).qemu.get()] + [
+                dict(r, type="lxc") for r in self._api.nodes(self._node).lxc.get()
+            ]
         result = []
         for r in resources:
             vmid = r.get("vmid")
             if not vmid:
                 continue
-            result.append(VMInfo(
-                vmid=int(vmid),
-                name=r.get("name") or f"VM {vmid}",
-                status=r.get("status", "unknown"),
-                vm_type=r.get("type", "qemu"),
-                node=r.get("node", self._node),
-            ))
+            result.append(
+                VMInfo(
+                    vmid=int(vmid),
+                    name=r.get("name") or f"VM {vmid}",
+                    status=r.get("status", "unknown"),
+                    vm_type=r.get("type", "qemu"),
+                    node=r.get("node", self._node),
+                )
+            )
         return result
 
     def build_task_info(self, raw_task: dict) -> TaskInfo | None:
@@ -255,17 +266,19 @@ def _parse_batch_log(log_text: str, batch_upid: str, node: str, batch_start: int
             except ValueError:
                 pass
             start = vm_start or batch_start
-            results.append(TaskInfo(
-                upid=f"{batch_upid}|{current_vmid}",
-                vmid=current_vmid,
-                node=node,
-                status="stopped",
-                exit_status=exit_status,
-                start_time=start,
-                end_time=vm_end,
-                duration_sec=(vm_end - start) if vm_end else None,
-                log_tail="\n".join(error_lines[-20:]),
-            ))
+            results.append(
+                TaskInfo(
+                    upid=f"{batch_upid}|{current_vmid}",
+                    vmid=current_vmid,
+                    node=node,
+                    status="stopped",
+                    exit_status=exit_status,
+                    start_time=start,
+                    end_time=vm_end,
+                    duration_sec=(vm_end - start) if vm_end else None,
+                    log_tail="\n".join(error_lines[-20:]),
+                )
+            )
             current_vmid = None
 
     return results

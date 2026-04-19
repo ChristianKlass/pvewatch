@@ -1,4 +1,5 @@
 """Tests for alert deduplication and digest rendering."""
+
 import tempfile
 import time
 
@@ -45,12 +46,14 @@ def test_storage_dedup_daily(conn):
 
 def test_digest_empty(conn):
     from unittest.mock import MagicMock
+
     settings = MagicMock()
     settings.pve_node = "pve"
     settings.history_days = 30
 
     # Insert a cluster row
     import uuid
+
     cluster_id = str(uuid.uuid4())
     conn.execute(
         "INSERT INTO clusters (id, name, host, port, node, token_id, token_secret, created_at) "
@@ -84,14 +87,23 @@ def test_digest_html_renders(conn):
             "INSERT INTO backup_results "
             "(id, cluster_id, vmid, vm_name, node, upid, status, exit_code, start_time, created_at) "
             "VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (str(uuid4()), cluster_id, vmid, f"vm-{vmid}", "pve",
-             f"UPID:pve:000000{i:02d}:00000000:67F00000:vzdump:{vmid}:root@pam:",
-             status, 0 if status == "OK" else 1,
-             int(time.time()) - i * 3600, int(time.time())),
+            (
+                str(uuid4()),
+                cluster_id,
+                vmid,
+                f"vm-{vmid}",
+                "pve",
+                f"UPID:pve:000000{i:02d}:00000000:67F00000:vzdump:{vmid}:root@pam:",
+                status,
+                0 if status == "OK" else 1,
+                int(time.time()) - i * 3600,
+                int(time.time()),
+            ),
         )
     conn.commit()
 
     from unittest.mock import MagicMock
+
     settings = MagicMock()
     settings.pve_node = "pve"
     settings.history_days = 30
@@ -102,6 +114,7 @@ def test_digest_html_renders(conn):
     from pathlib import Path
 
     from jinja2 import Environment, FileSystemLoader
+
     env = Environment(
         loader=FileSystemLoader(str(Path(__file__).parent.parent / "src/pvewatch/templates")),
         autoescape=True,

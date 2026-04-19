@@ -15,10 +15,7 @@ def connect(db_path: str) -> sqlite3.Connection:
 
 def migrate(conn: sqlite3.Connection) -> None:
     conn.execute(
-        "CREATE TABLE IF NOT EXISTS schema_migrations ("
-        "  version INTEGER PRIMARY KEY,"
-        "  applied_at INTEGER NOT NULL"
-        ")"
+        "CREATE TABLE IF NOT EXISTS schema_migrations (  version INTEGER PRIMARY KEY,  applied_at INTEGER NOT NULL)"
     )
     conn.commit()
 

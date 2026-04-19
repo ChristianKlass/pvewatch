@@ -1,4 +1,5 @@
 """Weekly digest generation and delivery."""
+
 import logging
 import sqlite3
 import time
@@ -72,41 +73,53 @@ def build_digest_data(conn: sqlite3.Connection, cluster_id: str, settings: Setti
                 day_map[day] = "fail"
         dots = [day_map.get(today - (6 - i), "none") for i in range(7)]
 
-        vms_out.append({
-            "name": data["name"],
-            "total": total,
-            "failures": failures,
-            "avg_duration": _fmt_duration(avg_dur),
-            "last_success": time.strftime("%b %d", time.localtime(last_ok)) if last_ok else None,
-            "dots": dots,
-        })
+        vms_out.append(
+            {
+                "name": data["name"],
+                "total": total,
+                "failures": failures,
+                "avg_duration": _fmt_duration(avg_dur),
+                "last_success": time.strftime("%b %d", time.localtime(last_ok)) if last_ok else None,
+                "dots": dots,
+            }
+        )
 
     # Storage: latest snapshot per pool
     storage_rows = conn.execute(
         """
-        SELECT storage_id, used_bytes, total_bytes
+        SELECT node, storage_id, used_bytes, total_bytes
         FROM storage_snapshots
         WHERE cluster_id = ?
           AND sampled_at = (
             SELECT MAX(sampled_at) FROM storage_snapshots s2
             WHERE s2.cluster_id = storage_snapshots.cluster_id
+              AND s2.node = storage_snapshots.node
               AND s2.storage_id = storage_snapshots.storage_id
           )
+        ORDER BY node, storage_id
         """,
         (cluster_id,),
     ).fetchall()
 
+    sid_counts: dict[str, int] = {}
+    for s in storage_rows:
+        sid_counts[s["storage_id"]] = sid_counts.get(s["storage_id"], 0) + 1
     storage_out = []
     for s in storage_rows:
         total = s["total_bytes"]
         used = s["used_bytes"]
         pct = (used / total * 100) if total else 0
-        storage_out.append({
-            "storage_id": s["storage_id"],
-            "used_gb": _fmt_gb(used),
-            "total_gb": _fmt_gb(total),
-            "pct": pct,
-        })
+        label = s["storage_id"]
+        if sid_counts[label] > 1 and s["node"]:
+            label = f"{s['node']}/{label}"
+        storage_out.append(
+            {
+                "storage_id": label,
+                "used_gb": _fmt_gb(used),
+                "total_gb": _fmt_gb(total),
+                "pct": pct,
+            }
+        )
 
     # Node name from kv or config
     node_row = conn.execute("SELECT value FROM kv WHERE key = 'node'").fetchone()
@@ -137,9 +150,8 @@ def send_weekly_digest(
 
     total_vms = len(data["vms"])
     failed_vms = sum(1 for v in data["vms"] if v["failures"] > 0)
-    subject = (
-        f"PVEWatch Weekly Digest — {total_vms} VMs"
-        + (f", {failed_vms} with failures" if failed_vms else ", all OK")
+    subject = f"PVEWatch Weekly Digest — {total_vms} VMs" + (
+        f", {failed_vms} with failures" if failed_vms else ", all OK"
     )
 
     text_fallback = f"PVEWatch weekly digest: {total_vms} VMs, {failed_vms} failures. Enable HTML to view full report."

@@ -1,4 +1,5 @@
 """Alert delivery: SMTP email and Discord webhook."""
+
 import json
 import logging
 import smtplib
@@ -154,8 +155,7 @@ def send_storage_alert(
         f"Total: {_fmt_gb(total_bytes)}\n"
     )
     discord_msg = (
-        f"⚠️ **Storage high** — `{storage_id}` at {used_pct:.0f}%\n"
-        f"Used: {_fmt_gb(used_bytes)} / {_fmt_gb(total_bytes)}"
+        f"⚠️ **Storage high** — `{storage_id}` at {used_pct:.0f}%\nUsed: {_fmt_gb(used_bytes)} / {_fmt_gb(total_bytes)}"
     )
 
     payload_ref = {"key": dedup_key, "storage_id": storage_id}
