@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #1a1a1a; max-width: 700px; margin: 0 auto; padding: 24px; }
+  h1 { font-size: 18px; margin-bottom: 4px; }
+  .subtitle { color: #6b7280; font-size: 14px; margin-bottom: 24px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+  th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: #6b7280; border-bottom: 1px solid #e5e7eb; padding: 6px 8px; }
+  td { padding: 8px; font-size: 14px; border-bottom: 1px solid #f3f4f6; vertical-align: middle; }
+  .ok   { color: #16a34a; font-weight: 600; }
+  .fail { color: #dc2626; font-weight: 600; }
+  .dots { letter-spacing: 2px; }
+  .dot-ok   { color: #16a34a; }
+  .dot-fail { color: #dc2626; }
+  .dot-none { color: #d1d5db; }
+  .storage-bar-wrap { background: #f3f4f6; border-radius: 4px; height: 8px; width: 100%; }
+  .storage-bar { height: 8px; border-radius: 4px; background: #3b82f6; }
+  .storage-bar.warn { background: #f59e0b; }
+  .storage-bar.crit { background: #dc2626; }
+  .footer { font-size: 12px; color: #9ca3af; margin-top: 32px; }
+</style>
+</head>
+<body>
+<h1>PVEWatch Weekly Digest</h1>
+<p class="subtitle">Week of {{ week_start }} · node {{ node }}</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>VM</th>
+      <th>Last 7 days</th>
+      <th>Runs</th>
+      <th>Failures</th>
+      <th>Avg duration</th>
+      <th>Last success</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for vm in vms %}
+    <tr>
+      <td>{{ vm.name }}</td>
+      <td class="dots">
+        {% for dot in vm.dots %}
+          {% if dot == 'ok' %}<span class="dot-ok">●</span>
+          {% elif dot == 'fail' %}<span class="dot-fail">●</span>
+          {% else %}<span class="dot-none">○</span>
+          {% endif %}
+        {% endfor %}
+      </td>
+      <td>{{ vm.total }}</td>
+      <td>{% if vm.failures > 0 %}<span class="fail">{{ vm.failures }}</span>{% else %}<span class="ok">0</span>{% endif %}</td>
+      <td>{{ vm.avg_duration }}</td>
+      <td>{{ vm.last_success or '—' }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+{% if storage %}
+<h2 style="font-size:15px;margin-bottom:12px;">Storage</h2>
+<table>
+  <thead>
+    <tr><th>Pool</th><th>Used</th><th>Total</th><th></th></tr>
+  </thead>
+  <tbody>
+  {% for s in storage %}
+    <tr>
+      <td>{{ s.storage_id }}</td>
+      <td>{{ s.used_gb }} GB</td>
+      <td>{{ s.total_gb }} GB</td>
+      <td style="width:160px">
+        <div class="storage-bar-wrap">
+          <div class="storage-bar {% if s.pct >= 85 %}crit{% elif s.pct >= 70 %}warn{% endif %}"
+               style="width:{{ s.pct|int }}%"></div>
+        </div>
+        <span style="font-size:12px;color:#6b7280">{{ s.pct|int }}%</span>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<p class="footer">PVEWatch · <a href="https://git.markklass.dev/markklass/pvewatch">git.markklass.dev/markklass/pvewatch</a></p>
+</body>
+</html>
