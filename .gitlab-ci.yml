@@ -1,4 +1,4 @@
-image: python:3.12-slim
+image: python:3.12
 
 stages:
   - lint
@@ -14,7 +14,7 @@ cache:
     - .cache/pip
 
 before_script:
-  - python3 -m pip install --quiet --break-system-packages -e ".[dev]" || python3 -m pip install --quiet --break-system-packages -e . pytest ruff
+  - pip install --quiet --break-system-packages -e ".[dev]" || pip install --quiet --break-system-packages -e . pytest ruff
 
 lint:
   stage: lint
