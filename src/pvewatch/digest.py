@@ -45,7 +45,7 @@ def _vm_dots(results: list, today: int) -> list[str]:
     return [day_map.get(today - (6 - i), "none") for i in range(7)]
 
 
-def _build_vm_entry(vmid: int, data: dict, today: int) -> dict:
+def _build_vm_entry(data: dict, today: int) -> dict:
     results = data["results"]
     failures = sum(1 for r in results if r["status"] not in ("OK", ""))
     ok_results = [r for r in results if r["status"] in ("OK", "")]
@@ -93,7 +93,7 @@ def build_digest_data(conn: sqlite3.Connection, cluster_id: str, settings: Setti
     ).fetchall()
 
     vm_data = _group_backup_rows(rows)
-    vms_out = [_build_vm_entry(vmid, data, today) for vmid, data in sorted(vm_data.items())]
+    vms_out = [_build_vm_entry(data, today) for _, data in sorted(vm_data.items())]
 
     storage_rows = conn.execute(
         """

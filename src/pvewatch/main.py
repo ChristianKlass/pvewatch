@@ -149,11 +149,8 @@ def main() -> None:
     signal.signal(signal.SIGTERM, _shutdown)
     signal.signal(signal.SIGINT, _shutdown)
 
-    try:
-        while True:
-            time.sleep(60)
-    except SystemExit:
-        raise
+    while True:
+        time.sleep(60)
 
 
 if __name__ == "__main__":
