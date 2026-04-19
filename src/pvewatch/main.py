@@ -13,7 +13,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from pvewatch.alerts import send_backup_failure_alert
 from pvewatch.config import Settings
-from pvewatch.database import connect, kv_get, kv_set, migrate
+from pvewatch.database import connect, kv_set, migrate
 from pvewatch.digest import send_weekly_digest
 from pvewatch.poller import import_history, poll_backup_tasks, refresh_vm_names
 from pvewatch.proxmox import ProxmoxClient
