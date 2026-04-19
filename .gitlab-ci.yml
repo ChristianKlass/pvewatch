@@ -29,6 +29,7 @@ test:
 
 sonarqube:
   stage: sonarqube
+  before_script: []
   image:
     name: sonarsource/sonar-scanner-cli:latest
     entrypoint: [""]
