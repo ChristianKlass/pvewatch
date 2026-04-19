@@ -27,8 +27,60 @@ def _fmt_gb(b: int) -> str:
     return f"{b / 1_073_741_824:.1f}"
 
 
+def _group_backup_rows(rows: list) -> dict[int, dict]:
+    vm_data: dict[int, dict] = {}
+    for r in rows:
+        vmid = r["vmid"]
+        if vmid not in vm_data:
+            vm_data[vmid] = {"vmid": vmid, "name": r["vm_name"] or f"VM {vmid}", "results": []}
+        vm_data[vmid]["results"].append(dict(r))
+    return vm_data
+
+
+def _vm_dots(results: list, today: int) -> list[str]:
+    day_map: dict[int, str] = {}
+    for r in results:
+        day = r["start_time"] // 86400
+        day_map[day] = "ok" if r["status"] in ("OK", "") else "fail"
+    return [day_map.get(today - (6 - i), "none") for i in range(7)]
+
+
+def _build_vm_entry(vmid: int, data: dict, today: int) -> dict:
+    results = data["results"]
+    failures = sum(1 for r in results if r["status"] not in ("OK", ""))
+    ok_results = [r for r in results if r["status"] in ("OK", "")]
+    durations = [r["duration_sec"] for r in results if r["duration_sec"]]
+    avg_dur = int(sum(durations) / len(durations)) if durations else None
+    last_ok = max((r["start_time"] for r in ok_results), default=None)
+    return {
+        "name": data["name"],
+        "total": len(results),
+        "failures": failures,
+        "avg_duration": _fmt_duration(avg_dur),
+        "last_success": time.strftime("%b %d", time.localtime(last_ok)) if last_ok else None,
+        "dots": _vm_dots(results, today),
+    }
+
+
+def _build_storage_out(storage_rows: list) -> list[dict]:
+    sid_counts: dict[str, int] = {}
+    for s in storage_rows:
+        sid_counts[s["storage_id"]] = sid_counts.get(s["storage_id"], 0) + 1
+    out = []
+    for s in storage_rows:
+        total = s["total_bytes"]
+        used = s["used_bytes"]
+        pct = (used / total * 100) if total else 0
+        label = s["storage_id"]
+        if sid_counts[label] > 1 and s["node"]:
+            label = f"{s['node']}/{label}"
+        out.append({"storage_id": label, "used_gb": _fmt_gb(used), "total_gb": _fmt_gb(total), "pct": pct})
+    return out
+
+
 def build_digest_data(conn: sqlite3.Connection, cluster_id: str, settings: Settings) -> dict:
     since = int(time.time()) - 7 * 86400
+    today = int(time.time()) // 86400
 
     rows = conn.execute(
         """
@@ -40,51 +92,9 @@ def build_digest_data(conn: sqlite3.Connection, cluster_id: str, settings: Setti
         (cluster_id, since),
     ).fetchall()
 
-    # Group by vmid
-    vm_data: dict[int, dict] = {}
-    for r in rows:
-        vmid = r["vmid"]
-        if vmid not in vm_data:
-            vm_data[vmid] = {
-                "vmid": vmid,
-                "name": r["vm_name"] or f"VM {vmid}",
-                "results": [],
-            }
-        vm_data[vmid]["results"].append(dict(r))
+    vm_data = _group_backup_rows(rows)
+    vms_out = [_build_vm_entry(vmid, data, today) for vmid, data in sorted(vm_data.items())]
 
-    vms_out = []
-    for vmid, data in sorted(vm_data.items()):
-        results = data["results"]
-        total = len(results)
-        failures = sum(1 for r in results if r["status"] not in ("OK", ""))
-        ok_results = [r for r in results if r["status"] in ("OK", "")]
-        durations = [r["duration_sec"] for r in results if r["duration_sec"]]
-        avg_dur = int(sum(durations) / len(durations)) if durations else None
-        last_ok = max((r["start_time"] for r in ok_results), default=None)
-
-        # 7 dots: one per day (today is rightmost)
-        today = int(time.time()) // 86400
-        day_map: dict[int, str] = {}
-        for r in results:
-            day = r["start_time"] // 86400
-            if r["status"] in ("OK", ""):
-                day_map[day] = "ok"
-            else:
-                day_map[day] = "fail"
-        dots = [day_map.get(today - (6 - i), "none") for i in range(7)]
-
-        vms_out.append(
-            {
-                "name": data["name"],
-                "total": total,
-                "failures": failures,
-                "avg_duration": _fmt_duration(avg_dur),
-                "last_success": time.strftime("%b %d", time.localtime(last_ok)) if last_ok else None,
-                "dots": dots,
-            }
-        )
-
-    # Storage: latest snapshot per pool
     storage_rows = conn.execute(
         """
         SELECT node, storage_id, used_bytes, total_bytes
@@ -101,33 +111,12 @@ def build_digest_data(conn: sqlite3.Connection, cluster_id: str, settings: Setti
         (cluster_id,),
     ).fetchall()
 
-    sid_counts: dict[str, int] = {}
-    for s in storage_rows:
-        sid_counts[s["storage_id"]] = sid_counts.get(s["storage_id"], 0) + 1
-    storage_out = []
-    for s in storage_rows:
-        total = s["total_bytes"]
-        used = s["used_bytes"]
-        pct = (used / total * 100) if total else 0
-        label = s["storage_id"]
-        if sid_counts[label] > 1 and s["node"]:
-            label = f"{s['node']}/{label}"
-        storage_out.append(
-            {
-                "storage_id": label,
-                "used_gb": _fmt_gb(used),
-                "total_gb": _fmt_gb(total),
-                "pct": pct,
-            }
-        )
-
-    # Node name from kv or config
     node_row = conn.execute("SELECT value FROM kv WHERE key = 'node'").fetchone()
     node = node_row["value"] if node_row else settings.pve_node
 
     return {
         "vms": vms_out,
-        "storage": storage_out,
+        "storage": _build_storage_out(storage_rows),
         "week_start": time.strftime("%b %d, %Y", time.localtime(since)),
         "node": node,
     }
