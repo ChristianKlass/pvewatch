@@ -677,6 +677,70 @@ _INDEX_TEMPLATE = """<!DOCTYPE html>
 """
 
 
+def _vm_day_dots(results: list, today: int, days: int) -> list[str]:
+    day_map: dict[int, str] = {}
+    for r in results:
+        day = r["start_time"] // 86400
+        if day_map.get(day) != "fail":
+            day_map[day] = "ok" if r["status"] in ("OK", "") else "fail"
+    return [day_map.get(today - (days - 1 - i), "none") for i in range(days)]
+
+
+def _vm_last_info(latest: dict | None, now: int) -> tuple:
+    if not latest:
+        return None, None, 0, False
+    ts = latest["start_time"]
+    return (
+        latest["status"],
+        time.strftime("%b %d %H:%M", time.localtime(ts)),
+        ts,
+        (now - ts) > 8 * 86400,
+    )
+
+
+def _build_vm_entry_web(vm: dict, results: list, latest: dict | None, today: int, days: int, now: int) -> dict:
+    vmid = vm["vmid"]
+    dots = _vm_day_dots(results, today, days)
+    last_status, last_run, last_run_ts, stale = _vm_last_info(latest, now)
+    return {
+        "vmid": vmid,
+        "name": vm["vm_name"] or f"VM {vmid}",
+        "vm_type": vm["vm_type"] or "qemu",
+        "node": vm["node"] or "",
+        "dots": dots,
+        "ok_count": sum(1 for d in dots if d == "ok"),
+        "fail_count": sum(1 for d in dots if d == "fail"),
+        "last_status": last_status,
+        "last_run": last_run,
+        "last_run_ts": last_run_ts,
+        "stale": stale,
+    }
+
+
+def _dedup_storage(storage_rows: list) -> list[dict]:
+    seen: dict[tuple, bool] = {}
+    out = []
+    for s in storage_rows:
+        total = s["total_bytes"]
+        used = s["used_bytes"]
+        key = (s["storage_id"], total)
+        if key in seen:
+            continue
+        seen[key] = True
+        out.append(
+            {
+                "storage_id": s["storage_id"],
+                "node": s["node"] or "",
+                "used_bytes": used,
+                "total_bytes": total,
+                "used_gb": f"{used / 1_073_741_824:.1f}",
+                "total_gb": f"{total / 1_073_741_824:.1f}",
+                "pct": (used / total * 100) if total else 0,
+            }
+        )
+    return out
+
+
 def _build_data(conn: sqlite3.Connection, node: str, days: int = 7) -> dict:
     now = int(time.time())
     since = now - days * 86400
@@ -718,54 +782,14 @@ def _build_data(conn: sqlite3.Connection, node: str, days: int = 7) -> dict:
     ).fetchall()
     latest_by_vmid = {r["vmid"]: r for r in latest_rows}
 
-    # Group window results by vmid
     results_by_vmid: dict[int, list] = {}
     for r in result_rows:
         results_by_vmid.setdefault(r["vmid"], []).append(r)
 
-    vms_out = []
-    for vm in vm_rows:
-        vmid = vm["vmid"]
-        results = results_by_vmid.get(vmid, [])
-        latest = latest_by_vmid.get(vmid)
-
-        day_map: dict[int, str] = {}
-        for r in results:
-            day = r["start_time"] // 86400
-            # keep 'fail' if already set
-            if day_map.get(day) != "fail":
-                day_map[day] = "ok" if r["status"] in ("OK", "") else "fail"
-
-        dots = [day_map.get(today - (days - 1 - i), "none") for i in range(days)]
-        ok_count = sum(1 for d in dots if d == "ok")
-        fail_count = sum(1 for d in dots if d == "fail")
-
-        stale = False
-        last_status = None
-        last_run = None
-        last_run_ts = 0
-        if latest:
-            last_status = latest["status"]
-            last_run_ts = latest["start_time"]
-            last_run = time.strftime("%b %d %H:%M", time.localtime(last_run_ts))
-            # stale = last backup was > 8 days ago (expected daily but missed)
-            stale = (now - last_run_ts) > 8 * 86400
-
-        vms_out.append(
-            {
-                "vmid": vmid,
-                "name": vm["vm_name"] or f"VM {vmid}",
-                "vm_type": vm["vm_type"] or "qemu",
-                "node": vm["node"] or "",
-                "dots": dots,
-                "ok_count": ok_count,
-                "fail_count": fail_count,
-                "last_status": last_status,
-                "last_run": last_run,
-                "last_run_ts": last_run_ts,
-                "stale": stale,
-            }
-        )
+    vms_out = [
+        _build_vm_entry_web(vm, results_by_vmid.get(vm["vmid"], []), latest_by_vmid.get(vm["vmid"]), today, days, now)
+        for vm in vm_rows
+    ]
 
     vm_nodes = list(dict.fromkeys(v["node"] for v in vms_out if v["node"]))
 
@@ -806,30 +830,7 @@ def _build_data(conn: sqlite3.Connection, node: str, days: int = 7) -> dict:
         ORDER BY node, storage_id
         """
     ).fetchall()
-    # Deduplicate: same pool name + same total_bytes = shared storage visible from multiple nodes.
-    # Keep the first (most-recently-sampled) occurrence. For pools with the same name but
-    # different sizes (truly separate pools), keep both and add a node prefix.
-    seen_shared: dict[tuple, bool] = {}
-    storage_out = []
-    for s in storage_rows:
-        total = s["total_bytes"]
-        used = s["used_bytes"]
-        pct = (used / total * 100) if total else 0
-        shared_key = (s["storage_id"], total)
-        if shared_key in seen_shared:
-            continue
-        seen_shared[shared_key] = True
-        storage_out.append(
-            {
-                "storage_id": s["storage_id"],
-                "node": s["node"] or "",
-                "used_bytes": used,
-                "total_bytes": total,
-                "used_gb": f"{used / 1_073_741_824:.1f}",
-                "total_gb": f"{total / 1_073_741_824:.1f}",
-                "pct": pct,
-            }
-        )
+    storage_out = _dedup_storage(storage_rows)
     # Unique ordered node list for the filter toggle
     storage_nodes = list(dict.fromkeys(s["node"] for s in storage_out if s["node"]))
 
