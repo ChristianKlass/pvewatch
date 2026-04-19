@@ -1,3 +1,5 @@
+image: python:3.12
+
 stages:
   - lint
   - test
@@ -10,23 +12,20 @@ variables:
 cache:
   paths:
     - .cache/pip
-    - .venv
 
 before_script:
-  - sudo apt-get install -y python3-venv python3-pip 2>/dev/null || true
-  - python3 -m venv .venv
-  - .venv/bin/pip install -e ".[dev]" || .venv/bin/pip install -e . pytest ruff
+  - pip install --quiet -e ".[dev]" || pip install --quiet -e . pytest ruff
 
 lint:
   stage: lint
   script:
-    - .venv/bin/ruff check src/ tests/
-    - .venv/bin/ruff format --check src/ tests/
+    - ruff check src/ tests/
+    - ruff format --check src/ tests/
 
 test:
   stage: test
   script:
-    - .venv/bin/python -m pytest tests/ -v
+    - python -m pytest tests/ -v
 
 sonarqube:
   stage: sonarqube
