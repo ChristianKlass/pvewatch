@@ -45,6 +45,8 @@ def insert_backup_result(
            start_time, end_time, duration_sec, size_bytes, log_tail, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(upid) DO UPDATE SET
+          vmid       = excluded.vmid,
+          vm_name    = COALESCE(excluded.vm_name, backup_results.vm_name),
           status     = excluded.status,
           exit_code  = excluded.exit_code,
           end_time   = excluded.end_time,
@@ -71,6 +73,54 @@ def insert_backup_result(
     conn.commit()
 
 
+def _is_batch_task(raw: dict) -> bool:
+    """True if this is a batch vzdump task (covers all VMs, no specific vmid)."""
+    raw_id = raw.get("id", "")
+    try:
+        vmid = int(raw_id) if raw_id else 0
+    except (ValueError, TypeError):
+        vmid = 0
+    return vmid == 0
+
+
+def _batch_processed_key(upid: str) -> str:
+    return f"batch_processed:{upid}"
+
+
+def _process_batch(
+    client: ProxmoxClient,
+    conn: sqlite3.Connection,
+    cluster_id: str,
+    raw: dict,
+    names: dict,
+    known: set,
+) -> list[TaskInfo]:
+    """Parse a batch task log, insert per-VM results. Returns newly-failed tasks."""
+    from pvewatch.database import kv_get, kv_set
+
+    upid = raw.get("upid", "")
+    if raw.get("status") == "running":
+        return []
+
+    if kv_get(conn, _batch_processed_key(upid)):
+        return []
+
+    vm_results = client.parse_batch_task(raw)
+    failures = []
+    for task in vm_results:
+        if task.upid not in known:
+            vm_name = names.get(task.vmid)
+            insert_backup_result(conn, cluster_id, task, vm_name)
+            if task.exit_status and task.exit_status != "OK":
+                failures.append(task)
+                log.warning("Backup FAILED (batch): VM %s (%s) — %s", task.vmid, vm_name or "?", task.exit_status)
+            else:
+                log.debug("Backup OK (batch): VM %s (%s)", task.vmid, vm_name or "?")
+
+    kv_set(conn, _batch_processed_key(upid), "1")
+    return failures
+
+
 def poll_backup_tasks(
     client: ProxmoxClient,
     conn: sqlite3.Connection,
@@ -86,12 +136,18 @@ def poll_backup_tasks(
 
     for raw in raw_tasks:
         upid = raw.get("upid", "")
-        if not upid or upid in known:
+        if not upid:
+            continue
+
+        if _is_batch_task(raw):
+            new_failures.extend(_process_batch(client, conn, cluster_id, raw, names, known))
+            continue
+
+        if upid in known:
             continue
 
         task = client.build_task_info(raw)
         if task is None:
-            # still running — skip until next poll
             continue
 
         vm_name = names.get(task.vmid)
@@ -99,13 +155,7 @@ def poll_backup_tasks(
 
         if task.exit_status and task.exit_status != "OK":
             new_failures.append(task)
-            log.warning(
-                "Backup FAILED: VM %s (%s) on %s — %s",
-                task.vmid,
-                vm_name or "?",
-                task.node,
-                task.exit_status,
-            )
+            log.warning("Backup FAILED: VM %s (%s) on %s — %s", task.vmid, vm_name or "?", task.node, task.exit_status)
         else:
             log.debug("Backup OK: VM %s (%s)", task.vmid, vm_name or "?")
 
@@ -169,14 +219,32 @@ def import_history(
 
     for raw in raw_tasks:
         upid = raw.get("upid", "")
-        if not upid or upid in known:
+        if not upid:
             continue
+
+        if _is_batch_task(raw):
+            if raw.get("status") == "running":
+                continue
+            if kv_get(conn, _batch_processed_key(upid)):
+                continue
+            vm_results = client.parse_batch_task(raw)
+            for task in vm_results:
+                is_new = task.upid not in known
+                vm_name = names.get(task.vmid)
+                insert_backup_result(conn, cluster_id, task, vm_name)
+                if is_new:
+                    imported += 1
+            kv_set(conn, _batch_processed_key(upid), "1")
+            continue
+
         task = client.build_task_info(raw)
         if task is None:
             continue
+        is_new = upid not in known
         vm_name = names.get(task.vmid)
         insert_backup_result(conn, cluster_id, task, vm_name)
-        imported += 1
+        if is_new:
+            imported += 1
 
     kv_set(conn, "history_imported", "1")
     log.info("History import complete: %d tasks across cluster", imported)
