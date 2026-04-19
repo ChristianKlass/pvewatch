@@ -41,11 +41,12 @@ class VMInfo:
 class ProxmoxClient:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
+        token_parts = settings.pve_token_id.split("!")
         self._api = ProxmoxAPI(
             settings.pve_host,
             port=settings.pve_port,
-            user=settings.pve_token_id,
-            token_name=settings.pve_token_id.split("!")[1] if "!" in settings.pve_token_id else "",
+            user=token_parts[0],
+            token_name=token_parts[1] if len(token_parts) > 1 else "",
             token_value=settings.pve_token_secret,
             verify_ssl=settings.pve_verify_ssl,
             timeout=30,
