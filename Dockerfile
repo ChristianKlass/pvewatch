@@ -1,0 +1,24 @@
+FROM python:3.12-slim AS base
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY pyproject.toml .
+RUN pip install --no-cache-dir -e ".[dev]" 2>/dev/null || pip install --no-cache-dir -e . \
+    && pip install --no-cache-dir proxmoxer requests apscheduler "pydantic-settings>=2.3.0" jinja2 httpx
+
+COPY src/ src/
+RUN pip install --no-cache-dir -e . --no-deps
+
+RUN mkdir -p /data
+
+EXPOSE 8080
+
+ENV DATA_PATH=/data \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+ENTRYPOINT ["python", "-m", "pvewatch.main"]

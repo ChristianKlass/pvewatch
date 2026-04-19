@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "pvewatch"
+version = "0.1.0"
+description = "Simple Proxmox VE monitoring: backup alerts, VM state, storage thresholds"
+requires-python = ">=3.11"
+dependencies = [
+    "proxmoxer>=2.0.0",
+    "requests>=2.31.0",
+    "apscheduler>=3.10.0",
+    "pydantic-settings>=2.3.0",
+    "jinja2>=3.1.0",
+    "httpx>=0.27.0",
+]
+
+[project.scripts]
+pvewatch = "pvewatch.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

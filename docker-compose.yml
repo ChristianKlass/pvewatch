@@ -1,0 +1,13 @@
+services:
+  pvewatch:
+    image: ghcr.io/markklass/pvewatch:latest
+    container_name: pvewatch
+    env_file: .env
+    volumes:
+      - pvewatch-data:/data
+    ports:
+      - "8080:8080"    # remove this line if you disable WEB_UI_ENABLED
+    restart: unless-stopped
+
+volumes:
+  pvewatch-data:
