@@ -14,7 +14,7 @@ cache:
     - .cache/pip
 
 before_script:
-  - pip install --quiet --break-system-packages -e ".[dev]" || pip install --quiet --break-system-packages -e . pytest ruff
+  - python3 -m pip install --quiet --break-system-packages -e ".[dev]" || python3 -m pip install --quiet --break-system-packages -e . pytest ruff
 
 lint:
   stage: lint
