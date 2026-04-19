@@ -215,6 +215,13 @@ class ProxmoxClient:
         )
 
 
+def _parse_timestamp(s: str) -> int | None:
+    try:
+        return int(time.mktime(time.strptime(s.strip(), "%Y-%m-%d %H:%M:%S")))
+    except ValueError:
+        return None
+
+
 def _parse_batch_log(log_text: str, batch_upid: str, node: str, batch_start: int) -> list[TaskInfo]:
     """Parse a batch vzdump task log into individual per-VM TaskInfo objects.
 
@@ -237,8 +244,7 @@ def _parse_batch_log(log_text: str, batch_upid: str, node: str, batch_start: int
         m = re.match(r"INFO: Starting Backup of VM (\d+)", line)
         if m:
             current_vmid = int(m.group(1))
-            vm_start = None
-            vm_end = None
+            vm_start = vm_end = None
             exit_status = "OK"
             error_lines = []
             continue
@@ -248,10 +254,7 @@ def _parse_batch_log(log_text: str, batch_upid: str, node: str, batch_start: int
 
         m = re.match(r"INFO: Backup started at (.+)", line)
         if m:
-            try:
-                vm_start = int(time.mktime(time.strptime(m.group(1).strip(), "%Y-%m-%d %H:%M:%S")))
-            except ValueError:
-                pass
+            vm_start = _parse_timestamp(m.group(1))
             continue
 
         if "ERROR:" in line:
@@ -260,26 +263,25 @@ def _parse_batch_log(log_text: str, batch_upid: str, node: str, batch_start: int
             continue
 
         m = re.match(r"INFO: Backup finished at (.+)", line)
-        if m:
-            try:
-                vm_end = int(time.mktime(time.strptime(m.group(1).strip(), "%Y-%m-%d %H:%M:%S")))
-            except ValueError:
-                pass
-            start = vm_start or batch_start
-            results.append(
-                TaskInfo(
-                    upid=f"{batch_upid}|{current_vmid}",
-                    vmid=current_vmid,
-                    node=node,
-                    status="stopped",
-                    exit_status=exit_status,
-                    start_time=start,
-                    end_time=vm_end,
-                    duration_sec=(vm_end - start) if vm_end else None,
-                    log_tail="\n".join(error_lines[-20:]),
-                )
+        if not m:
+            continue
+
+        vm_end = _parse_timestamp(m.group(1))
+        start = vm_start or batch_start
+        results.append(
+            TaskInfo(
+                upid=f"{batch_upid}|{current_vmid}",
+                vmid=current_vmid,
+                node=node,
+                status="stopped",
+                exit_status=exit_status,
+                start_time=start,
+                end_time=vm_end,
+                duration_sec=(vm_end - start) if vm_end else None,
+                log_tail="\n".join(error_lines[-20:]),
             )
-            current_vmid = None
+        )
+        current_vmid = None
 
     return results
 
