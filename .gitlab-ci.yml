@@ -25,7 +25,12 @@ lint:
 test:
   stage: test
   script:
-    - python -m pytest tests/ -v
+    - python -m pytest tests/ -v --cov=pvewatch --cov-report=xml:coverage.xml
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
 
 sonarqube:
   stage: sonarqube
