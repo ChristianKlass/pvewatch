@@ -1,6 +1,6 @@
 services:
   pvewatch:
-    image: ghcr.io/markklass/pvewatch:latest
+    image: pvewatch/pvewatch:latest
     container_name: pvewatch
     env_file: .env
     volumes:

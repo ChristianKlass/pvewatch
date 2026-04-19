@@ -13,7 +13,7 @@ docker run -d \
   -e PVE_TOKEN_SECRET=your-secret-here \
   -e ALERT_DISCORD_WEBHOOK=https://discord.com/api/webhooks/... \
   -v pvewatch-data:/data \
-  ghcr.io/markklass/pvewatch:latest
+  pvewatch/pvewatch:latest
 ```
 
 ---
@@ -109,7 +109,7 @@ docker run -d \
   -v pvewatch-data:/data \
   -p 8080:8080 \
   --restart unless-stopped \
-  ghcr.io/markklass/pvewatch:latest
+  pvewatch/pvewatch:latest
 ```
 
 ### Step 4 — Verify
