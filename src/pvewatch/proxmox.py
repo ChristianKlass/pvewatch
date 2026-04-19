@@ -143,8 +143,13 @@ class ProxmoxClient:
         # exitstatus is in the task list response for stopped tasks
         exit_status = raw_task.get("exitstatus", "")
 
-        # Extract vmid from UPID: UPID:node:pid:pstart:starttime:type:vmid:user:
-        vmid = _parse_vmid_from_upid(upid)
+        # Prefer the top-level 'id' field (present for PBS-targeted tasks where
+        # the UPID vmid slot is empty), fall back to UPID parsing.
+        raw_id = raw_task.get("id", "")
+        try:
+            vmid = int(raw_id) if raw_id else _parse_vmid_from_upid(upid)
+        except (ValueError, TypeError):
+            vmid = _parse_vmid_from_upid(upid)
 
         log_tail = ""
         if exit_status and exit_status != "OK":

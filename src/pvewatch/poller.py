@@ -117,8 +117,18 @@ def refresh_vm_names(
     conn: sqlite3.Connection,
     cluster_id: str,
 ) -> None:
-    """Fetch current VM/CT list and upsert into vm_states."""
+    """Fetch current VM/CT list and insert a new vm_states snapshot.
+
+    Skips if a snapshot was already taken within the last 60 seconds to
+    avoid duplicate rows when called multiple times on startup.
+    """
     now = int(time.time())
+    last = conn.execute(
+        "SELECT MAX(sampled_at) FROM vm_states WHERE cluster_id = ?", (cluster_id,)
+    ).fetchone()[0]
+    if last and (now - last) < 60:
+        return
+
     try:
         vms: list[VMInfo] = client.get_vms()
     except Exception as exc:
