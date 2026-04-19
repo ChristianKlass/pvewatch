@@ -23,11 +23,14 @@ pvewatch = "pvewatch.main:main"
 where = ["src"]
 
 [tool.ruff]
-line-length = 100
+line-length = 120
 target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/pvewatch/web.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.11"

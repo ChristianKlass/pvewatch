@@ -1,8 +1,7 @@
 """Tests for UPID parsing and task info building (no live Proxmox needed)."""
-import pytest
 from unittest.mock import MagicMock, patch
 
-from pvewatch.proxmox import _parse_vmid_from_upid, ProxmoxClient, TaskInfo
+from pvewatch.proxmox import ProxmoxClient, _parse_vmid_from_upid
 
 
 def test_parse_vmid_standard():

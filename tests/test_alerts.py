@@ -1,14 +1,12 @@
 """Tests for alert deduplication and digest rendering."""
-import json
 import tempfile
 import time
 
 import pytest
 
-from pvewatch.database import connect, migrate
 from pvewatch.alerts import _alert_already_sent, _record_alert
+from pvewatch.database import connect, migrate
 from pvewatch.digest import build_digest_data
-from pvewatch.proxmox import TaskInfo
 
 
 @pytest.fixture
@@ -69,10 +67,10 @@ def test_digest_empty(conn):
 
 def test_digest_html_renders(conn):
     """Digest template should produce valid HTML with VM data."""
-    from uuid import uuid4
-    from pvewatch.digest import send_weekly_digest, build_digest_data
-    from pvewatch.database import kv_set
     import time
+    from uuid import uuid4
+
+    from pvewatch.digest import build_digest_data
 
     cluster_id = str(uuid4())
     conn.execute(
@@ -101,8 +99,9 @@ def test_digest_html_renders(conn):
     data = build_digest_data(conn, cluster_id, settings)
     assert len(data["vms"]) == 2
 
-    from jinja2 import Environment, FileSystemLoader
     from pathlib import Path
+
+    from jinja2 import Environment, FileSystemLoader
     env = Environment(
         loader=FileSystemLoader(str(Path(__file__).parent.parent / "src/pvewatch/templates")),
         autoescape=True,

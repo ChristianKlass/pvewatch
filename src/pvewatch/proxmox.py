@@ -1,6 +1,5 @@
 """Proxmox API client wrapping proxmoxer."""
 import logging
-import time
 from dataclasses import dataclass
 
 from proxmoxer import ProxmoxAPI
