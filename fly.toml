@@ -1,0 +1,39 @@
+app = "pvewatch"
+primary_region = "sin"
+
+[build]
+  image = "ghcr.io/markklass/pvewatch:latest"
+
+[env]
+  DATA_PATH = "/data"
+  PYTHONUNBUFFERED = "1"
+
+[[mounts]]
+  source = "pvewatch_data"
+  destination = "/data"
+
+[[services]]
+  internal_port = 8080
+  protocol = "tcp"
+
+  [[services.ports]]
+    handlers = ["http"]
+    port = 80
+
+  [[services.ports]]
+    handlers = ["tls", "http"]
+    port = 443
+
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 25
+    soft_limit = 20
+
+[checks]
+  [checks.alive]
+    grace_period = "30s"
+    interval = "30s"
+    method = "get"
+    path = "/"
+    protocol = "http"
+    timeout = "5s"
