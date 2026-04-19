@@ -192,6 +192,8 @@ _INDEX_TEMPLATE = """<!DOCTYPE html>
     <div class="card-header">
       <span class="card-title">Backup history</span>
       <div class="days-toggle">
+        <a href="?days=3" {% if days == 3 %}class="active"{% endif %}>3d</a>
+        <a href="?days=5" {% if days == 5 %}class="active"{% endif %}>5d</a>
         <a href="?days=7" {% if days == 7 %}class="active"{% endif %}>7d</a>
         <a href="?days=14" {% if days == 14 %}class="active"{% endif %}>14d</a>
         <a href="?days=30" {% if days == 30 %}class="active"{% endif %}>30d</a>
@@ -464,7 +466,7 @@ def run_web_server(conn: sqlite3.Connection, node: str, port: int) -> None:
             qs = parse_qs(parsed.query)
             try:
                 days = int(qs.get("days", ["7"])[0])
-                if days not in (7, 14, 30):
+                if days not in (3, 5, 7, 14, 30):
                     days = 7
             except (ValueError, IndexError):
                 days = 7
