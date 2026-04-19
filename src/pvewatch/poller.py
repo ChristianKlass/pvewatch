@@ -126,7 +126,6 @@ def poll_backup_tasks(
     client: ProxmoxClient,
     conn: sqlite3.Connection,
     cluster_id: str,
-    settings: Settings,
 ) -> list[TaskInfo]:
     """Poll for new completed backup tasks. Returns list of newly-failed tasks."""
     known = _known_upids(conn, cluster_id)

@@ -67,7 +67,7 @@ def _ensure_cluster(conn: sqlite3.Connection, settings: Settings) -> str:
 
 def _poll_cycle(client: ProxmoxClient, conn: sqlite3.Connection, cluster_id: str, settings: Settings) -> None:
     refresh_vm_names(client, conn, cluster_id)
-    failed = poll_backup_tasks(client, conn, cluster_id, settings)
+    failed = poll_backup_tasks(client, conn, cluster_id)
     for task in failed:
         vm_name_row = conn.execute("SELECT vm_name FROM backup_results WHERE upid = ?", (task.upid,)).fetchone()
         vm_name = vm_name_row["vm_name"] if vm_name_row else None
@@ -153,7 +153,7 @@ def main() -> None:
         while True:
             time.sleep(60)
     except SystemExit:
-        pass
+        raise
 
 
 if __name__ == "__main__":
