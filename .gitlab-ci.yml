@@ -76,7 +76,9 @@ docker-dev:
 
 deploy:
   stage: deploy
-  image: bitnami/kubectl:latest
+  image:
+    name: bitnami/kubectl:latest
+    entrypoint: [""]
   before_script: []
   needs:
     - docker-dev
