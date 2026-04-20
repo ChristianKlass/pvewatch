@@ -89,6 +89,12 @@ deploy:
     kubernetes:
       agent: homelab/infra:homelab
   script:
+    # Build kubeconfig from service account token
+    - |
+      kubectl config set-cluster homelab --server="$K8S_SERVER" --insecure-skip-tls-verify=true
+      kubectl config set-credentials pvewatch-deployer --token="$K8S_TOKEN"
+      kubectl config set-context deploy --cluster=homelab --user=pvewatch-deployer
+      kubectl config use-context deploy
     # Apply namespace, configmap, and service (idempotent)
     - kubectl apply -f k8s/namespace.yaml
     - kubectl apply -f k8s/configmap.yaml
