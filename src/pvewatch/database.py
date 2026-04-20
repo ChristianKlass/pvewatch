@@ -67,14 +67,14 @@ def migrate(conn: Connection) -> None:
         version = int(path.stem.split("_")[0])
         if version in applied:
             continue
-        sql = path.read_text()
-        if conn._dialect == "postgres":
-            for stmt in sql.split(";"):
-                stmt = stmt.strip()
-                if stmt:
-                    conn.execute(stmt)
-        else:
-            conn._raw.executescript(sql)
+        for stmt in path.read_text().split(";"):
+            stmt = stmt.strip()
+            if not stmt:
+                continue
+            # ALTER COLUMN TYPE is postgres-only; SQLite type affinity handles large ints natively
+            if conn._dialect == "sqlite" and "ALTER COLUMN" in stmt.upper():
+                continue
+            conn.execute(stmt)
         conn.execute(
             "INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)",
             (version, int(time.time())),

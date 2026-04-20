@@ -21,7 +21,7 @@ CREATE TABLE backup_results (
     start_time   INTEGER NOT NULL,
     end_time     INTEGER,
     duration_sec INTEGER,
-    size_bytes   INTEGER,
+    size_bytes   BIGINT,
     log_tail     TEXT,
     created_at   INTEGER NOT NULL
 );
@@ -36,8 +36,8 @@ CREATE TABLE storage_snapshots (
     id          TEXT PRIMARY KEY,
     cluster_id  TEXT NOT NULL REFERENCES clusters(id),
     storage_id  TEXT NOT NULL,
-    total_bytes INTEGER NOT NULL,
-    used_bytes  INTEGER NOT NULL,
+    total_bytes BIGINT NOT NULL,
+    used_bytes  BIGINT NOT NULL,
     sampled_at  INTEGER NOT NULL
 );
 
