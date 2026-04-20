@@ -29,17 +29,23 @@ spec:
           # volumeMounts:
           #   - name: data
           #     mountPath: /data
+          # startupProbe gives the app up to 10 minutes to complete first-run
+          # history import before handing off to liveness/readiness probes
+          startupProbe:
+            httpGet:
+              path: /api/status
+              port: 8080
+            failureThreshold: 60
+            periodSeconds: 10
           readinessProbe:
             httpGet:
               path: /api/status
               port: 8080
-            initialDelaySeconds: 10
             periodSeconds: 30
           livenessProbe:
             httpGet:
               path: /api/status
               port: 8080
-            initialDelaySeconds: 30
             periodSeconds: 60
             failureThreshold: 3
           resources:
