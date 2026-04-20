@@ -3,7 +3,6 @@
 import logging
 import os
 import signal
-import sqlite3
 import threading
 import time
 from uuid import uuid4
@@ -14,7 +13,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from pvewatch.alerts import send_backup_failure_alert
 from pvewatch.config import Settings
-from pvewatch.database import connect, kv_set, migrate
+from pvewatch.database import Connection, connect, kv_set, migrate
 from pvewatch.digest import send_weekly_digest
 from pvewatch.poller import import_history, poll_backup_tasks, refresh_vm_names
 from pvewatch.proxmox import ProxmoxClient
@@ -38,7 +37,7 @@ _DAY_TO_DOW = {
 }
 
 
-def _ensure_cluster(conn: sqlite3.Connection, settings: Settings) -> str:
+def _ensure_cluster(conn: Connection, settings: Settings) -> str:
     """Return cluster_id, creating the row if it does not exist."""
     row = conn.execute(
         "SELECT id FROM clusters WHERE host = ? AND node = ?", (settings.pve_host, settings.pve_node)
@@ -65,7 +64,7 @@ def _ensure_cluster(conn: sqlite3.Connection, settings: Settings) -> str:
     return cluster_id
 
 
-def _poll_cycle(client: ProxmoxClient, conn: sqlite3.Connection, cluster_id: str, settings: Settings) -> None:
+def _poll_cycle(client: ProxmoxClient, conn: Connection, cluster_id: str, settings: Settings) -> None:
     refresh_vm_names(client, conn, cluster_id)
     failed = poll_backup_tasks(client, conn, cluster_id)
     for task in failed:
@@ -82,7 +81,7 @@ def main() -> None:
     settings = Settings()  # raises ValidationError with clear message on bad config
 
     os.makedirs(settings.data_path, exist_ok=True)
-    conn = connect(settings.db_path)
+    conn = connect(settings.database_url or settings.db_path)
     migrate(conn)
 
     client = ProxmoxClient(settings)

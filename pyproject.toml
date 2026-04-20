@@ -18,6 +18,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["ruff", "pytest", "pytest-cov"]
+postgres = ["psycopg2-binary"]
 
 [project.scripts]
 pvewatch = "pvewatch.main:main"

@@ -1,7 +1,6 @@
 """Weekly digest generation and delivery."""
 
 import logging
-import sqlite3
 import time
 from pathlib import Path
 
@@ -9,6 +8,7 @@ from jinja2 import Environment, FileSystemLoader
 
 from pvewatch.alerts import _send_email
 from pvewatch.config import Settings
+from pvewatch.database import Connection
 
 log = logging.getLogger(__name__)
 
@@ -78,7 +78,7 @@ def _build_storage_out(storage_rows: list) -> list[dict]:
     return out
 
 
-def build_digest_data(conn: sqlite3.Connection, cluster_id: str, settings: Settings) -> dict:
+def build_digest_data(conn: Connection, cluster_id: str, settings: Settings) -> dict:
     since = int(time.time()) - 7 * 86400
     today = int(time.time()) // 86400
 
@@ -123,7 +123,7 @@ def build_digest_data(conn: sqlite3.Connection, cluster_id: str, settings: Setti
 
 
 def send_weekly_digest(
-    conn: sqlite3.Connection,
+    conn: Connection,
     cluster_id: str,
     settings: Settings,
 ) -> None:

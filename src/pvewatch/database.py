@@ -5,21 +5,62 @@ from pathlib import Path
 _MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 
 
-def connect(db_path: str) -> sqlite3.Connection:
-    conn = sqlite3.connect(db_path, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
-    return conn
+class Connection:
+    """Thin adapter over sqlite3.Connection or a psycopg2 connection."""
+
+    def __init__(self, raw, dialect: str) -> None:
+        self._raw = raw
+        self._dialect = dialect  # "sqlite" | "postgres"
+
+    def _sql(self, sql: str) -> str:
+        if self._dialect == "postgres":
+            return sql.replace("?", "%s")
+        return sql
+
+    def execute(self, sql: str, params=()):
+        if self._dialect == "postgres":
+            cur = self._raw.cursor()
+            cur.execute(self._sql(sql), params)
+            return cur
+        return self._raw.execute(sql, params)
+
+    def executemany(self, sql: str, params_seq):
+        if self._dialect == "postgres":
+            cur = self._raw.cursor()
+            cur.executemany(self._sql(sql), params_seq)
+            return cur
+        return self._raw.executemany(sql, params_seq)
+
+    def commit(self) -> None:
+        self._raw.commit()
+
+    def close(self) -> None:
+        self._raw.close()
 
 
-def migrate(conn: sqlite3.Connection) -> None:
+def connect(url_or_path: str) -> Connection:
+    if url_or_path.startswith(("postgresql://", "postgres://")):
+        import psycopg2
+        from psycopg2.extras import RealDictCursor
+
+        raw = psycopg2.connect(url_or_path, cursor_factory=RealDictCursor)
+        return Connection(raw, "postgres")
+    # "memory" or ":memory:" → in-memory SQLite (no persistence, history re-pulled on restart)
+    path = ":memory:" if url_or_path in ("memory", ":memory:") else url_or_path
+    raw = sqlite3.connect(path, check_same_thread=False)
+    raw.row_factory = sqlite3.Row
+    raw.execute("PRAGMA journal_mode=WAL")
+    raw.execute("PRAGMA foreign_keys=ON")
+    return Connection(raw, "sqlite")
+
+
+def migrate(conn: Connection) -> None:
     conn.execute(
-        "CREATE TABLE IF NOT EXISTS schema_migrations (  version INTEGER PRIMARY KEY,  applied_at INTEGER NOT NULL)"
+        "CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)"
     )
     conn.commit()
 
-    applied = {row[0] for row in conn.execute("SELECT version FROM schema_migrations")}
+    applied = {row["version"] for row in conn.execute("SELECT version FROM schema_migrations").fetchall()}
 
     migration_files = sorted(_MIGRATIONS_DIR.glob("*.sql"), key=lambda p: int(p.stem.split("_")[0]))
     for path in migration_files:
@@ -27,7 +68,13 @@ def migrate(conn: sqlite3.Connection) -> None:
         if version in applied:
             continue
         sql = path.read_text()
-        conn.executescript(sql)
+        if conn._dialect == "postgres":
+            for stmt in sql.split(";"):
+                stmt = stmt.strip()
+                if stmt:
+                    conn.execute(stmt)
+        else:
+            conn._raw.executescript(sql)
         conn.execute(
             "INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)",
             (version, int(time.time())),
@@ -35,12 +82,12 @@ def migrate(conn: sqlite3.Connection) -> None:
         conn.commit()
 
 
-def kv_get(conn: sqlite3.Connection, key: str, default: str | None = None) -> str | None:
+def kv_get(conn: Connection, key: str, default: str | None = None) -> str | None:
     row = conn.execute("SELECT value FROM kv WHERE key = ?", (key,)).fetchone()
     return row["value"] if row else default
 
 
-def kv_set(conn: sqlite3.Connection, key: str, value: str) -> None:
+def kv_set(conn: Connection, key: str, value: str) -> None:
     conn.execute(
         "INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         (key, value),

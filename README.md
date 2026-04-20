@@ -144,8 +144,9 @@ No extra configuration needed. PVEWatch connects to `PVE_HOST` and uses the clus
 | `STORAGE_ALERT_THRESHOLD` | `85` | Storage usage % that triggers an alert |
 | `WEB_UI_ENABLED` | `true` | Enable the read-only web dashboard |
 | `WEB_UI_PORT` | `8080` | Port for the web dashboard |
-| `DATA_PATH` | `/data` | Path inside container for SQLite database |
+| `DATA_PATH` | `/data` | Path inside container for SQLite database file |
 | `HISTORY_DAYS` | `30` | Days of backup history to import on first start |
+| `DATABASE_URL` | — | Database connection — see [Storage modes](#storage-modes) |
 
 ---
 
@@ -332,9 +333,41 @@ Run `docker logs pvewatch`. If the error is `No alert target configured`, add at
 
 ---
 
+## Storage modes
+
+PVEWatch supports three storage backends, controlled by `DATABASE_URL`:
+
+### SQLite (default)
+No configuration needed. The database is stored at `DATA_PATH/pvewatch.db` inside the container.
+
+For Docker, mount a volume:
+```bash
+docker run -v pvewatch-data:/data ...
+```
+
+For Kubernetes, apply `k8s/pvc.yaml` and uncomment the volume section in `k8s/deployment.yaml`.
+
+### PostgreSQL
+Set `DATABASE_URL` to a postgres connection string:
+```env
+DATABASE_URL=postgresql://user:password@host:5432/pvewatch
+```
+Requires `psycopg2-binary` (`pip install pvewatch[postgres]`). Recommended for Kubernetes.
+
+### In-memory (no persistence)
+```env
+DATABASE_URL=memory
+```
+Uses an in-memory SQLite database. On every restart, history is re-pulled from the Proxmox API so the dashboard still shows full history. Trade-offs:
+- Alerts may re-fire after a restart (deduplication state is lost)
+- Weekly digest is not available
+- Storage history over time is not tracked (only current state is shown)
+
+---
+
 ## How it works
 
-On startup, PVEWatch imports the last `HISTORY_DAYS` of backup tasks from all cluster nodes into a local SQLite database. After that it polls every `POLL_INTERVAL_MINUTES`.
+On startup, PVEWatch imports the last `HISTORY_DAYS` of backup tasks from all cluster nodes into its database. After that it polls every `POLL_INTERVAL_MINUTES`.
 
 For each poll it:
 1. Fetches `vzdump` tasks from every online cluster node
@@ -342,7 +375,7 @@ For each poll it:
 3. For batch tasks (all-VM jobs): fetches the full task log and parses per-VM start/finish/error lines
 4. For any new failure, sends an immediate alert with the last 20 log lines
 
-Nothing is written to your Proxmox host. The SQLite database lives at `/data/pvewatch.db` inside the container volume.
+Nothing is written to your Proxmox host. See [Storage modes](#storage-modes) for database options.
 
 ---
 

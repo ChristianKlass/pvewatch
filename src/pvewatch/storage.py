@@ -1,12 +1,12 @@
 """Storage pool monitoring."""
 
 import logging
-import sqlite3
 import time
 from uuid import uuid4
 
 from pvewatch.alerts import send_storage_alert
 from pvewatch.config import Settings
+from pvewatch.database import Connection
 from pvewatch.proxmox import ProxmoxClient
 
 log = logging.getLogger(__name__)
@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 
 def poll_storage(
     client: ProxmoxClient,
-    conn: sqlite3.Connection,
+    conn: Connection,
     cluster_id: str,
     settings: Settings,
 ) -> None:

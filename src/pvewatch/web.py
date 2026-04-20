@@ -2,12 +2,13 @@
 
 import json
 import logging
-import sqlite3
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from jinja2 import Environment
+
+from pvewatch.database import Connection
 
 log = logging.getLogger(__name__)
 
@@ -741,7 +742,7 @@ def _dedup_storage(storage_rows: list) -> list[dict]:
     return out
 
 
-def _build_data(conn: sqlite3.Connection, node: str, days: int = 7) -> dict:
+def _build_data(conn: Connection, node: str, days: int = 7) -> dict:
     now = int(time.time())
     since = now - days * 86400
     today = now // 86400
@@ -859,7 +860,7 @@ def _build_data(conn: sqlite3.Connection, node: str, days: int = 7) -> dict:
     }
 
 
-def _build_index(conn: sqlite3.Connection, node: str, days: int = 7) -> str:
+def _build_index(conn: Connection, node: str, days: int = 7) -> str:
     data = _build_data(conn, node, days)
     env = Environment(autoescape=True)
     tmpl = env.from_string(_INDEX_TEMPLATE)
@@ -946,7 +947,7 @@ def _build_metrics(data: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
-def run_web_server(conn: sqlite3.Connection, node: str, port: int) -> None:
+def run_web_server(conn: Connection, node: str, port: int) -> None:
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
             parsed = urlparse(self.path)

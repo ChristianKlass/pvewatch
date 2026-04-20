@@ -3,7 +3,6 @@
 import json
 import logging
 import smtplib
-import sqlite3
 import time
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -12,6 +11,7 @@ from uuid import uuid4
 import httpx
 
 from pvewatch.config import Settings
+from pvewatch.database import Connection
 from pvewatch.proxmox import TaskInfo
 
 log = logging.getLogger(__name__)
@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 _DISCORD_MAX_LEN = 1900  # leave room for markdown overhead
 
 
-def _alert_already_sent(conn: sqlite3.Connection, alert_type: str, ref_key: str) -> bool:
+def _alert_already_sent(conn: Connection, alert_type: str, ref_key: str) -> bool:
     """Return True if we already sent this alert (deduplicate by alert_type + ref_key)."""
     row = conn.execute(
         "SELECT id FROM alerts_sent WHERE alert_type = ? AND payload LIKE ? LIMIT 1",
@@ -29,7 +29,7 @@ def _alert_already_sent(conn: sqlite3.Connection, alert_type: str, ref_key: str)
 
 
 def _record_alert(
-    conn: sqlite3.Connection,
+    conn: Connection,
     alert_type: str,
     target: str,
     payload: dict,
@@ -84,7 +84,7 @@ def _send_discord(settings: Settings, content: str) -> bool:
 
 
 def send_backup_failure_alert(
-    conn: sqlite3.Connection,
+    conn: Connection,
     settings: Settings,
     task: TaskInfo,
     vm_name: str | None,
@@ -133,7 +133,7 @@ def send_backup_failure_alert(
 
 
 def send_storage_alert(
-    conn: sqlite3.Connection,
+    conn: Connection,
     settings: Settings,
     storage_id: str,
     used_pct: float,

@@ -5,6 +5,7 @@ stages:
   - test
   - sonarqube
   - docker
+  - deploy
 
 variables:
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
@@ -72,6 +73,52 @@ docker-dev:
     - docker build -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA" -t "$CI_REGISTRY_IMAGE:dev" .
     - docker push "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA"
     - docker push "$CI_REGISTRY_IMAGE:dev"
+
+deploy:
+  stage: deploy
+  image: bitnami/kubectl:latest
+  before_script: []
+  needs:
+    - docker-dev
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  environment:
+    name: production
+    kubernetes:
+      agent: homelab/infra:homelab
+  script:
+    # Apply namespace, configmap, and service (idempotent)
+    - kubectl apply -f k8s/namespace.yaml
+    - kubectl apply -f k8s/configmap.yaml
+    - kubectl apply -f k8s/service.yaml
+    # Create/update imagePullSecret from a GitLab deploy token stored as CI variables
+    # (GITLAB_DEPLOY_TOKEN_USER / GITLAB_DEPLOY_TOKEN_TOKEN — read_registry scope)
+    - |
+      kubectl create secret docker-registry gitlab-registry \
+        --namespace=pvewatch \
+        --docker-server="$CI_REGISTRY" \
+        --docker-username="$GITLAB_DEPLOY_TOKEN_USER" \
+        --docker-password="$GITLAB_DEPLOY_TOKEN_TOKEN" \
+        --dry-run=client -o yaml | kubectl apply -f -
+    # Create/update secret from GitLab CI masked variables
+    - |
+      kubectl create secret generic pvewatch-secrets \
+        --namespace=pvewatch \
+        --from-literal=PVE_HOST="$PVE_HOST" \
+        --from-literal=PVE_NODE="$PVE_NODE" \
+        --from-literal=PVE_TOKEN_ID="$PVE_TOKEN_ID" \
+        --from-literal=PVE_TOKEN_SECRET="$PVE_TOKEN_SECRET" \
+        --from-literal=DATABASE_URL="$DATABASE_URL" \
+        --from-literal=ALERT_EMAIL_SMTP_HOST="$ALERT_EMAIL_SMTP_HOST" \
+        --from-literal=ALERT_EMAIL_SMTP_PORT="$ALERT_EMAIL_SMTP_PORT" \
+        --from-literal=ALERT_EMAIL_SMTP_USER="$ALERT_EMAIL_SMTP_USER" \
+        --from-literal=ALERT_EMAIL_SMTP_PASS="$ALERT_EMAIL_SMTP_PASS" \
+        --from-literal=ALERT_EMAIL_TO="$ALERT_EMAIL_TO" \
+        --from-literal=ALERT_EMAIL_FROM="$ALERT_EMAIL_FROM" \
+        --dry-run=client -o yaml | kubectl apply -f -
+    # Inject the image and apply the deployment
+    - sed "s|IMAGE_TAG|$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA|g" k8s/deployment.yaml | kubectl apply -f -
+    - kubectl rollout status deployment/pvewatch --namespace=pvewatch --timeout=120s
 
 # Push release tags to Docker Hub for public distribution
 docker-release:

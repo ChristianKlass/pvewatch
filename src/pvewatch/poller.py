@@ -1,17 +1,17 @@
 """Backup task poller: reads new vzdump tasks, stores results, triggers alerts."""
 
 import logging
-import sqlite3
 import time
 from uuid import uuid4
 
 from pvewatch.config import Settings
+from pvewatch.database import Connection
 from pvewatch.proxmox import ProxmoxClient, TaskInfo, VMInfo
 
 log = logging.getLogger(__name__)
 
 
-def _vm_name_map(conn: sqlite3.Connection, cluster_id: str) -> dict[int, str]:
+def _vm_name_map(conn: Connection, cluster_id: str) -> dict[int, str]:
     """Return {vmid: name} from the most recent vm_states snapshot."""
     rows = conn.execute(
         """
@@ -25,7 +25,7 @@ def _vm_name_map(conn: sqlite3.Connection, cluster_id: str) -> dict[int, str]:
     return {row["vmid"]: row["vm_name"] for row in rows}
 
 
-def _known_upids(conn: sqlite3.Connection, cluster_id: str) -> set[str]:
+def _known_upids(conn: Connection, cluster_id: str) -> set[str]:
     rows = conn.execute(
         "SELECT upid FROM backup_results WHERE cluster_id = ?",
         (cluster_id,),
@@ -34,7 +34,7 @@ def _known_upids(conn: sqlite3.Connection, cluster_id: str) -> set[str]:
 
 
 def insert_backup_result(
-    conn: sqlite3.Connection,
+    conn: Connection,
     cluster_id: str,
     task: TaskInfo,
     vm_name: str | None,
@@ -90,7 +90,7 @@ def _batch_processed_key(upid: str) -> str:
 
 def _process_batch(
     client: ProxmoxClient,
-    conn: sqlite3.Connection,
+    conn: Connection,
     cluster_id: str,
     raw: dict,
     names: dict,
@@ -124,7 +124,7 @@ def _process_batch(
 
 def poll_backup_tasks(
     client: ProxmoxClient,
-    conn: sqlite3.Connection,
+    conn: Connection,
     cluster_id: str,
 ) -> list[TaskInfo]:
     """Poll for new completed backup tasks. Returns list of newly-failed tasks."""
@@ -164,7 +164,7 @@ def poll_backup_tasks(
 
 def refresh_vm_names(
     client: ProxmoxClient,
-    conn: sqlite3.Connection,
+    conn: Connection,
     cluster_id: str,
 ) -> None:
     """Fetch current VM/CT list and insert a new vm_states snapshot.
@@ -173,7 +173,8 @@ def refresh_vm_names(
     avoid duplicate rows when called multiple times on startup.
     """
     now = int(time.time())
-    last = conn.execute("SELECT MAX(sampled_at) FROM vm_states WHERE cluster_id = ?", (cluster_id,)).fetchone()[0]
+    sql = "SELECT MAX(sampled_at) AS max_sampled_at FROM vm_states WHERE cluster_id = ?"
+    last = conn.execute(sql, (cluster_id,)).fetchone()["max_sampled_at"]
     if last and (now - last) < 60:
         return
 
@@ -197,7 +198,7 @@ def refresh_vm_names(
 
 def _import_batch_task(
     client: ProxmoxClient,
-    conn: sqlite3.Connection,
+    conn: Connection,
     cluster_id: str,
     raw: dict,
     names: dict,
@@ -219,7 +220,7 @@ def _import_batch_task(
 
 def _import_single_task(
     client: ProxmoxClient,
-    conn: sqlite3.Connection,
+    conn: Connection,
     cluster_id: str,
     raw: dict,
     names: dict,
@@ -236,7 +237,7 @@ def _import_single_task(
 
 def import_history(
     client: ProxmoxClient,
-    conn: sqlite3.Connection,
+    conn: Connection,
     cluster_id: str,
     settings: Settings,
 ) -> int:

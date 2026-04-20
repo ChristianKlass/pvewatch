@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pvewatch
+  namespace: pvewatch
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pvewatch
+  template:
+    metadata:
+      labels:
+        app: pvewatch
+    spec:
+      imagePullSecrets:
+        - name: gitlab-registry
+      containers:
+        - name: pvewatch
+          image: IMAGE_TAG
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: pvewatch-config
+            - secretRef:
+                name: pvewatch-secrets
+          # Uncomment if using SQLite with a PVC (apply k8s/pvc.yaml first):
+          # volumeMounts:
+          #   - name: data
+          #     mountPath: /data
+          readinessProbe:
+            httpGet:
+              path: /api/status
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          livenessProbe:
+            httpGet:
+              path: /api/status
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+      # Uncomment if using SQLite with a PVC:
+      # volumes:
+      #   - name: data
+      #     persistentVolumeClaim:
+      #       claimName: pvewatch-data

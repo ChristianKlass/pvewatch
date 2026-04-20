@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install dependencies first (cached unless pyproject.toml changes)
 COPY pyproject.toml .
-RUN pip install --no-cache-dir proxmoxer requests apscheduler "pydantic-settings>=2.3.0" jinja2 httpx
+RUN pip install --no-cache-dir proxmoxer requests apscheduler "pydantic-settings>=2.3.0" jinja2 httpx psycopg2-binary
 
 # Install the package
 COPY src/ src/

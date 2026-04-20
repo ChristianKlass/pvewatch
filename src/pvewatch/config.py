@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     # Data
     data_path: str = "/data"
     history_days: int = 30
+    database_url: str = ""
 
     @field_validator("digest_day")
     @classmethod

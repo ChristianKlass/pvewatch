@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pvewatch-config
+  namespace: pvewatch
+data:
+  PVE_PORT: "8006"
+  PVE_VERIFY_SSL: "false"
+  POLL_INTERVAL_MINUTES: "15"
+  DIGEST_DAY: "sunday"
+  DIGEST_HOUR: "9"
+  STORAGE_ALERT_THRESHOLD: "85"
+  WEB_UI_ENABLED: "true"
+  WEB_UI_PORT: "8080"
+  DATA_PATH: "/data"
+  HISTORY_DAYS: "30"
+  # Storage mode — choose one and set DATABASE_URL in your secret accordingly:
+  #   SQLite (persistent): apply k8s/pvc.yaml, uncomment the volume in deployment.yaml, leave DATABASE_URL unset
+  #   PostgreSQL:          set DATABASE_URL=postgresql://user:pass@host:5432/pvewatch in secret
+  #   In-memory:           set DATABASE_URL=memory in secret (no persistence, history re-pulled on restart)
