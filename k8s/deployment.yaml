@@ -33,21 +33,24 @@ spec:
           # history import before handing off to liveness/readiness probes
           startupProbe:
             httpGet:
-              path: /api/status
+              path: /healthz
               port: 8080
             failureThreshold: 60
             periodSeconds: 10
+            timeoutSeconds: 5
           readinessProbe:
             httpGet:
-              path: /api/status
+              path: /healthz
               port: 8080
             periodSeconds: 30
+            timeoutSeconds: 5
           livenessProbe:
             httpGet:
-              path: /api/status
+              path: /healthz
               port: 8080
             periodSeconds: 60
             failureThreshold: 3
+            timeoutSeconds: 5
           resources:
             requests:
               cpu: 50m

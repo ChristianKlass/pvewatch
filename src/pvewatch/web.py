@@ -962,6 +962,14 @@ def run_web_server(conn: Connection, node: str, port: int) -> None:
             if parsed.path in ("/", "/index.html"):
                 body = _build_index(conn, node, days).encode()
                 self._respond(body, "text/html; charset=utf-8")
+            elif parsed.path == "/healthz":
+                try:
+                    conn.execute("SELECT 1")
+                    body = b'{"status":"ok"}'
+                    self._respond(body, "application/json")
+                except Exception:
+                    self.send_response(503)
+                    self.end_headers()
             elif parsed.path == "/api/status":
                 data = _build_data(conn, node, days)
                 body = json.dumps(data, default=str).encode()
@@ -979,7 +987,10 @@ def run_web_server(conn: Connection, node: str, port: int) -> None:
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
-            self.wfile.write(body)
+            try:
+                self.wfile.write(body)
+            except BrokenPipeError:
+                pass
 
         def log_message(self, fmt: str, *args: object) -> None:
             log.debug("web: " + fmt, *args)
