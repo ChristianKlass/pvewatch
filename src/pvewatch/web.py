@@ -18,6 +18,9 @@ _INDEX_TEMPLATE = """<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PVEWatch — {{ node }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script>
   (function(){
     var t = localStorage.getItem('pvewatch-theme') || '';
@@ -42,7 +45,7 @@ _INDEX_TEMPLATE = """<!DOCTYPE html>
     --amb:      #ffb224;
     --amb-d:    #3a2500;
     --blu:      #4488ff;
-    --font:     'Consolas', 'Monaco', 'Menlo', monospace;
+    --font:     'JetBrains Mono', 'Consolas', 'Monaco', monospace;
   }
 
   /* ── Light ─── */
