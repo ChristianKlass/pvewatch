@@ -821,14 +821,16 @@ def _build_data(conn: Connection, node: str, days: int = 7) -> dict:
     # Storage
     storage_rows = conn.execute(
         """
-        SELECT node, storage_id, used_bytes, total_bytes
-        FROM storage_snapshots
-        WHERE sampled_at = (
-            SELECT MAX(sampled_at) FROM storage_snapshots s2
-            WHERE s2.node = storage_snapshots.node
-              AND s2.storage_id = storage_snapshots.storage_id
-        )
-        ORDER BY node, storage_id
+        SELECT s.node, s.storage_id, s.used_bytes, s.total_bytes
+        FROM storage_snapshots s
+        JOIN (
+            SELECT node, storage_id, MAX(sampled_at) AS max_ts
+            FROM storage_snapshots
+            GROUP BY node, storage_id
+        ) latest ON s.node = latest.node
+               AND s.storage_id = latest.storage_id
+               AND s.sampled_at = latest.max_ts
+        ORDER BY s.node, s.storage_id
         """
     ).fetchall()
     storage_out = _dedup_storage(storage_rows)
