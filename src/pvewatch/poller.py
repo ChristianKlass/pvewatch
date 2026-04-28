@@ -184,6 +184,14 @@ def refresh_vm_names(
         log.warning("Could not fetch VM list: %s", exc)
         return
 
+    if vms:
+        current_vmids = [vm.vmid for vm in vms]
+        placeholders = ",".join("?" * len(current_vmids))
+        conn.execute(
+            f"DELETE FROM vm_states WHERE cluster_id = ? AND vmid NOT IN ({placeholders})",
+            (cluster_id, *current_vmids),
+        )
+
     for vm in vms:
         conn.execute(
             """
