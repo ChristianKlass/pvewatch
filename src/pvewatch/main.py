@@ -133,9 +133,18 @@ def main() -> None:
     if settings.web_ui_enabled:
         from pvewatch.web import run_web_server
 
+        # The web server uses its own DB connection so its reads (and the
+        # rollback-on-error path) can't disturb the poller's transaction.
+        # In-memory SQLite can't be reopened as a second independent database,
+        # so share the connection only in that (dev-only, no-persistence) mode.
+        if (settings.database_url or "") in ("memory", ":memory:"):
+            web_conn = conn
+        else:
+            web_conn = connect(settings.database_url or settings.db_path)
+
         web_thread = threading.Thread(
             target=run_web_server,
-            args=[conn, settings.pve_node, settings.web_ui_port],
+            args=[web_conn, settings.pve_node, settings.web_ui_port],
             daemon=True,
         )
         web_thread.start()

@@ -30,17 +30,19 @@ spec:
           #   - name: data
           #     mountPath: /data
           # startupProbe gives the app up to 10 minutes to complete first-run
-          # history import before handing off to liveness/readiness probes
+          # history import before handing off to liveness/readiness probes.
+          # /readyz checks DB connectivity; /healthz only checks the process is
+          # alive (a DB blip must not restart the pod — see pvewatch#32).
           startupProbe:
             httpGet:
-              path: /healthz
+              path: /readyz
               port: 8080
             failureThreshold: 60
             periodSeconds: 10
             timeoutSeconds: 5
           readinessProbe:
             httpGet:
-              path: /healthz
+              path: /readyz
               port: 8080
             periodSeconds: 30
             timeoutSeconds: 5

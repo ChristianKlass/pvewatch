@@ -2,6 +2,7 @@
 
 import json
 import logging
+import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -949,7 +950,51 @@ def _build_metrics(data: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _dispatch(path: str, days: int, conn: Connection, node: str, lock) -> tuple[int, str, bytes]:
+    """Route a GET request to (status, content_type, body).
+
+    Liveness ``/healthz`` deliberately does NOT touch the DB: a database blip
+    must not restart a healthy monitoring process (pvewatch#32). All endpoints
+    that DO query hold ``lock`` (the web server's connection is single-threaded)
+    and roll back on error, so one failed query can't leave the connection in an
+    aborted-transaction state that wedges every later request.
+    """
+    if path == "/healthz":
+        return 200, "application/json", b'{"status":"ok"}'
+
+    if path == "/readyz":
+        try:
+            with lock:
+                conn.execute("SELECT 1").fetchone()
+            return 200, "application/json", b'{"status":"ready"}'
+        except Exception:
+            conn.rollback()
+            return 503, "application/json", b'{"status":"unavailable"}'
+
+    try:
+        if path in ("/", "/index.html"):
+            with lock:
+                body = _build_index(conn, node, days).encode()
+            return 200, "text/html; charset=utf-8", body
+        if path == "/api/status":
+            with lock:
+                data = _build_data(conn, node, days)
+            return 200, "application/json", json.dumps(data, default=str).encode()
+        if path == "/metrics":
+            with lock:
+                data = _build_data(conn, node, days)
+            return 200, "text/plain; version=0.0.4; charset=utf-8", _build_metrics(data).encode()
+    except Exception:
+        conn.rollback()
+        log.exception("web: error handling %s", path)
+        return 500, "text/plain; charset=utf-8", b"internal error"
+
+    return 404, "text/plain; charset=utf-8", b"not found"
+
+
 def run_web_server(conn: Connection, node: str, port: int) -> None:
+    db_lock = threading.Lock()
+
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
             parsed = urlparse(self.path)
@@ -961,28 +1006,18 @@ def run_web_server(conn: Connection, node: str, port: int) -> None:
             except (ValueError, IndexError):
                 days = 7
 
-            if parsed.path in ("/", "/index.html"):
-                body = _build_index(conn, node, days).encode()
-                self._respond(body, "text/html; charset=utf-8")
-            elif parsed.path == "/healthz":
-                try:
-                    conn.execute("SELECT 1")
-                    body = b'{"status":"ok"}'
-                    self._respond(body, "application/json")
-                except Exception:
-                    self.send_response(503)
-                    self.end_headers()
-            elif parsed.path == "/api/status":
-                data = _build_data(conn, node, days)
-                body = json.dumps(data, default=str).encode()
-                self._respond(body, "application/json")
-            elif parsed.path == "/metrics":
-                data = _build_data(conn, node, days)
-                body = _build_metrics(data).encode()
-                self._respond(body, "text/plain; version=0.0.4; charset=utf-8")
+            status, content_type, body = _dispatch(parsed.path, days, conn, node, db_lock)
+            if status == 200:
+                self._respond(body, content_type)
             else:
-                self.send_response(404)
+                self.send_response(status)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
+                try:
+                    self.wfile.write(body)
+                except BrokenPipeError:
+                    pass
 
         def _respond(self, body: bytes, content_type: str) -> None:
             self.send_response(200)
