@@ -4,6 +4,8 @@ A single Docker container that tells you when your Proxmox VE backups fail, VMs 
 
 PVEWatch reads your Proxmox task log via API token, stores per-VM backup history in SQLite, and sends alerts to email and/or Discord.
 
+![PVEWatch dashboard showing per-VM backup history heatmap and storage usage](docs/screenshot.png)
+
 ---
 
 ## What it monitors
