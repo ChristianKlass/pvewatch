@@ -2,7 +2,7 @@ app = "pvewatch"
 primary_region = "sin"
 
 [build]
-  image = "pvewatch/pvewatch:latest"
+  image = "ghcr.io/christianklass/pvewatch:latest"
 
 [env]
   DATA_PATH = "/data"

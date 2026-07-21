@@ -1,6 +1,6 @@
 services:
   pvewatch:
-    image: pvewatch/pvewatch:latest
+    image: ghcr.io/christianklass/pvewatch:latest
     container_name: pvewatch
     env_file: .env
     volumes:

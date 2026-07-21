@@ -75,10 +75,9 @@ ALERT_EMAIL_TO=you@example.com
 ALERT_EMAIL_FROM=pvewatch@example.com
 ```
 
-### Step 3 — Build and run
+### Step 3 — Run
 
 ```bash
-docker build -t pvewatch:latest .
 docker compose up -d
 ```
 
@@ -91,8 +90,10 @@ docker run -d \
   -v pvewatch-data:/data \
   -p 8080:8080 \
   --restart unless-stopped \
-  pvewatch:latest
+  ghcr.io/christianklass/pvewatch:latest
 ```
+
+Images are published for amd64 and arm64. To build from source instead: `docker build -t pvewatch:latest .`
 
 ### Step 4 — Verify
 
