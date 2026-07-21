@@ -1,6 +1,6 @@
 # PVEWatch
 
-A single Docker container that tells you when your Proxmox VE backups fail, VMs go down, or storage is filling up. No hook scripts. No Prometheus. No Grafana.
+A single Docker container that tells you when your Proxmox VE backups fail, VMs go down, or storage is filling up. It doesn't need hook scripts, Prometheus, or Grafana.
 
 PVEWatch reads your Proxmox task log via API token, stores per-VM backup history in SQLite, and sends alerts to email and/or Discord.
 
@@ -8,15 +8,15 @@ PVEWatch reads your Proxmox task log via API token, stores per-VM backup history
 
 ## What it monitors
 
-- **Backup jobs** — alerts on any `vzdump` task that fails or exits non-zero, with the last 20 lines of the task log included in the alert
-- **Batch backups** — "backup all VMs" jobs (single task covering all VMs) are parsed per-VM from the task log
-- **Backup history** — per-VM heatmap of every backup result for the last 3–30 days, visible in the web dashboard
-- **Storage pools** — alerts when any pool crosses the threshold (default 85%)
-- **Weekly digest** — Sunday morning summary: which VMs backed up, storage levels, failure count
+- **Backup jobs**: alerts on any `vzdump` task that fails or exits non-zero, with the last 20 lines of the task log included in the alert
+- **Batch backups**: "backup all VMs" jobs (single task covering all VMs) are parsed per-VM from the task log
+- **Backup history**: per-VM heatmap of every backup result for the last 3–30 days, visible in the web dashboard
+- **Storage pools**: alerts when any pool crosses the threshold (default 85%)
+- **Weekly digest**: Sunday morning summary of which VMs backed up, storage levels, and failure count
 
 ## What it does not do
 
-- Monitor Proxmox Backup Server (PBS) directly — it sees PBS-destined backups via the Proxmox task log, but does not query PBS itself
+- Monitor Proxmox Backup Server (PBS) directly. It sees PBS-destined backups via the Proxmox task log, but does not query PBS itself
 - Modify anything on your Proxmox host
 
 ---
@@ -31,21 +31,21 @@ PVEWatch reads your Proxmox task log via API token, stores per-VM backup history
 
 ## Setup
 
-### Step 1 — Create a read-only API token in Proxmox
+### Step 1: Create a read-only API token in Proxmox
 
 PVEWatch never writes to your cluster. It needs a PVEAuditor token.
 
-1. **Datacenter → Permissions → Users** — create `monitoring@pve` (Realm: Proxmox VE authentication server)
+1. **Datacenter → Permissions → Users**: create `monitoring@pve` (Realm: Proxmox VE authentication server)
 2. **Datacenter → Permissions → API Tokens** → Add
    - User: `monitoring@pve`, Token ID: `pvewatch`
    - **Uncheck** "Privilege Separation"
-   - Copy the secret — it is only shown once
+   - Copy the secret. It is only shown once
 3. **Datacenter → Permissions → Add → User Permission**
    - Path: `/`, User: `monitoring@pve`, Role: `PVEAuditor`, Propagate: checked
 
 Your `PVE_TOKEN_ID` will be `monitoring@pve!pvewatch`.
 
-### Step 2 — Configure
+### Step 2: Configure
 
 ```bash
 cp .env.example .env
@@ -75,7 +75,7 @@ ALERT_EMAIL_TO=you@example.com
 ALERT_EMAIL_FROM=pvewatch@example.com
 ```
 
-### Step 3 — Run
+### Step 3: Run
 
 ```bash
 docker compose up -d
@@ -95,7 +95,7 @@ docker run -d \
 
 Images are published for amd64 and arm64. To build from source instead: `docker build -t pvewatch:latest .`
 
-### Step 4 — Verify
+### Step 4: Verify
 
 ```bash
 docker logs pvewatch
@@ -118,7 +118,7 @@ Open `http://your-docker-host:8080` for the backup dashboard.
 
 No extra configuration needed. PVEWatch connects to `PVE_HOST` and uses the cluster API to discover all online nodes, then polls each node's task log independently. All VMs and containers across the cluster appear in the dashboard automatically.
 
-`PVE_NODE` is used as a fallback if the cluster API is unreachable, and for storage monitoring (storage is queried per-node — only the configured node's pools are shown).
+`PVE_NODE` is used as a fallback if the cluster API is unreachable, and for storage monitoring (storage is queried per node, so only the configured node's pools are shown).
 
 ---
 
@@ -149,7 +149,7 @@ No extra configuration needed. PVEWatch connects to `PVE_HOST` and uses the clus
 | `WEB_UI_PASSWORD` | — | Password for HTTP Basic Auth |
 | `DATA_PATH` | `/data` | Path inside container for SQLite database file |
 | `HISTORY_DAYS` | `30` | Days of backup history to import on first start |
-| `DATABASE_URL` | — | Database connection — see [Storage modes](#storage-modes) |
+| `DATABASE_URL` | — | Database connection, see [Storage modes](#storage-modes) |
 
 ---
 
@@ -157,14 +157,14 @@ No extra configuration needed. PVEWatch connects to `PVE_HOST` and uses the clus
 
 The web UI is read-only. Open `http://your-docker-host:8080`.
 
-By default there is no authentication. To require a login, set `WEB_UI_USERNAME` and `WEB_UI_PASSWORD` — this protects the dashboard, the JSON API, and `/metrics` with HTTP Basic Auth. The `/healthz` and `/readyz` probe endpoints stay open so Kubernetes probes keep working.
+By default there is no authentication. To require a login, set `WEB_UI_USERNAME` and `WEB_UI_PASSWORD`. This protects the dashboard, the JSON API, and `/metrics` with HTTP Basic Auth, while the `/healthz` and `/readyz` probe endpoints stay open so Kubernetes probes keep working.
 
 - Summary stats: total VMs, backed-up count, failure events (with unresolved indicator), never-backed-up count
 - Per-VM backup heatmap with 3/5/7/14/30 day range selector
 - Sortable columns: Node, VM/Container, Status, Last backup
 - Per-node filter toggle for both VMs and storage pools
 - Storage pool usage cards, deduplicated across nodes
-- Four colour themes: Dark, Light, Monokai, Solarized — persists in browser
+- Four colour themes (Dark, Light, Monokai, Solarized), saved in the browser
 
 ---
 
@@ -174,7 +174,7 @@ All endpoints are served on the same port as the dashboard and handled concurren
 
 ### `GET /api/status`
 
-Returns a JSON snapshot of current cluster state. Accepts an optional `?days=` query parameter (3, 5, 7, 14, or 30 — default 7) which controls the backup history window.
+Returns a JSON snapshot of current cluster state. Accepts an optional `?days=` query parameter (3, 5, 7, 14, or 30; default 7) which controls the backup history window.
 
 ```json
 {
@@ -208,7 +208,7 @@ Returns a JSON snapshot of current cluster state. Accepts an optional `?days=` q
 | `days` | integer | History window in use for this response |
 | `vm_nodes` | string[] | Ordered list of unique node names that have VMs |
 | `storage_nodes` | string[] | Ordered list of unique node names that have storage |
-| `unattributed` | object[] | Batch task failures that could not be attributed to a specific VM — each has `time` (string) and `status` (string) |
+| `unattributed` | object[] | Batch task failures that could not be attributed to a specific VM. Each has `time` (string) and `status` (string) |
 
 **`summary` object**
 
@@ -221,7 +221,7 @@ Returns a JSON snapshot of current cluster state. Accepts an optional `?days=` q
 | `unresolved_failures` | integer | VMs whose *most recent* backup is a failure (not yet recovered) |
 | `never_backed_up` | integer | VMs with no backup record at all |
 
-**`vms` array — each object**
+**`vms` array, one object per VM**
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -237,7 +237,7 @@ Returns a JSON snapshot of current cluster state. Accepts an optional `?days=` q
 | `last_run_ts` | integer | Unix timestamp of most recent backup (0 if never) |
 | `stale` | boolean | `true` if most recent backup is more than 8 days ago |
 
-**`storage` array — each object**
+**`storage` array, one object per pool**
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -249,13 +249,13 @@ Returns a JSON snapshot of current cluster state. Accepts an optional `?days=` q
 | `total_gb` | string | Total capacity formatted as GB |
 | `pct` | float | Usage percentage (0–100) |
 
-Shared storage visible from multiple nodes (same name and same total capacity) is deduplicated — it appears once attributed to the first node that reported it.
+Shared storage visible from multiple nodes (same name and same total capacity) is deduplicated: it appears once, attributed to the first node that reported it.
 
 ---
 
 ### `GET /metrics`
 
-Returns Prometheus-format metrics. Scrape this endpoint with your Prometheus instance. The `days` query parameter is not supported here — the window always uses the configured default (7 days).
+Returns Prometheus-format metrics. Scrape this endpoint with your Prometheus instance. The `days` query parameter is not supported here; the window always uses the configured default (7 days).
 
 The primary value-add over the [native Proxmox exporter](https://github.com/prometheus-pve/prometheus-pve-exporter) is per-VM backup outcome history, which Proxmox does not expose as metrics.
 
@@ -270,7 +270,7 @@ The primary value-add over the [native Proxmox exporter](https://github.com/prom
 | `pvewatch_vms_unresolved_failures` | VMs whose most recent backup is still a failure |
 | `pvewatch_last_poll_timestamp_seconds` | Unix timestamp of the last successful Proxmox poll |
 
-**Per-VM gauges** — labels: `vmid`, `vm`, `node`, `type`
+**Per-VM gauges**, labelled with `vmid`, `vm`, `node`, `type`
 
 | Metric | Description |
 |--------|-------------|
@@ -278,7 +278,7 @@ The primary value-add over the [native Proxmox exporter](https://github.com/prom
 | `pvewatch_backup_last_status` | Most recent backup result: `1`=ok, `0`=failed, `-1`=stale (>8 days ago), `-2`=never |
 | `pvewatch_backup_failures_window` | Number of failed backup days in the current window |
 
-**Per-pool gauges** — labels: `pool`, `node`
+**Per-pool gauges**, labelled with `pool`, `node`
 
 | Metric | Description |
 |--------|-------------|
@@ -303,7 +303,7 @@ The primary value-add over the [native Proxmox exporter](https://github.com/prom
 
 **`Authentication failed` on startup**
 
-Check `PVE_TOKEN_ID` format — must be `user@realm!tokenname` e.g. `monitoring@pve!pvewatch`. The secret is the UUID copied when the token was created.
+Check the `PVE_TOKEN_ID` format: it must be `user@realm!tokenname`, e.g. `monitoring@pve!pvewatch`. The secret is the UUID copied when the token was created.
 
 **`SSL certificate verify failed`**
 
@@ -312,12 +312,12 @@ Most Proxmox installs use a self-signed cert. Set `PVE_VERIFY_SSL=false` (the de
 **No backup results / all VMs show no history**
 
 1. Confirm the token has `PVEAuditor` on path `/` with Propagate checked.
-2. Check whether your backup jobs are "backup all VMs" jobs — these are batch tasks. PVEWatch parses them from the task log. If you only ever ran batch backups, the per-VM results come from log parsing, not the task API directly.
-3. Run `docker logs pvewatch` and look for `History import complete: N tasks` — if N is 0, the token likely lacks permission to read tasks.
+2. Check whether your backup jobs are "backup all VMs" jobs. These are batch tasks, and PVEWatch parses them from the task log. If you only ever ran batch backups, the per-VM results come from log parsing, not the task API directly.
+3. Run `docker logs pvewatch` and look for `History import complete: N tasks`. If N is 0, the token likely lacks permission to read tasks.
 
 **VMs appear on the wrong node**
 
-Not an issue — PVEWatch queries all cluster nodes and the cluster resource API, so VM placement does not matter.
+Not an issue. PVEWatch queries all cluster nodes and the cluster resource API, so VM placement does not matter.
 
 **Email alerts not arriving**
 
