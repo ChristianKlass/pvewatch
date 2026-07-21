@@ -384,6 +384,10 @@ Nothing is written to your Proxmox host. See [Storage modes](#storage-modes) for
 
 ---
 
+## AI disclosure
+
+I built this project with help from AI coding tools (Claude). I review, test, and maintain everything that goes in.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
