@@ -1,5 +1,8 @@
 """Read-only web dashboard, JSON API, and Prometheus metrics."""
 
+import base64
+import binascii
+import hmac
 import json
 import logging
 import threading
@@ -950,6 +953,28 @@ def _build_metrics(data: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _auth_required(path: str) -> bool:
+    """Kubernetes probes are exempt — kubelets don't send credentials."""
+    return path not in ("/healthz", "/readyz")
+
+
+def _check_auth(auth_header: str | None, username: str, password: str) -> bool:
+    """Validate an Authorization header for HTTP Basic Auth.
+
+    Auth is disabled (always allowed) when no username is configured.
+    """
+    if not username:
+        return True
+    if not auth_header or not auth_header.startswith("Basic "):
+        return False
+    try:
+        decoded = base64.b64decode(auth_header[6:], validate=True).decode()
+    except (binascii.Error, UnicodeDecodeError):
+        return False
+    expected = f"{username}:{password}"
+    return hmac.compare_digest(decoded.encode(), expected.encode())
+
+
 def _dispatch(path: str, days: int, conn: Connection, node: str, lock) -> tuple[int, str, bytes]:
     """Route a GET request to (status, content_type, body).
 
@@ -992,12 +1017,24 @@ def _dispatch(path: str, days: int, conn: Connection, node: str, lock) -> tuple[
     return 404, "text/plain; charset=utf-8", b"not found"
 
 
-def run_web_server(conn: Connection, node: str, port: int) -> None:
+def run_web_server(conn: Connection, node: str, port: int, username: str = "", password: str = "") -> None:
     db_lock = threading.Lock()
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
             parsed = urlparse(self.path)
+            if _auth_required(parsed.path) and not _check_auth(self.headers.get("Authorization"), username, password):
+                body = b"unauthorized"
+                self.send_response(401)
+                self.send_header("WWW-Authenticate", 'Basic realm="PVEWatch"')
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                try:
+                    self.wfile.write(body)
+                except BrokenPipeError:
+                    pass
+                return
             qs = parse_qs(parsed.query)
             try:
                 days = int(qs.get("days", ["7"])[0])

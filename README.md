@@ -145,6 +145,8 @@ No extra configuration needed. PVEWatch connects to `PVE_HOST` and uses the clus
 | `STORAGE_ALERT_THRESHOLD` | `85` | Storage usage % that triggers an alert |
 | `WEB_UI_ENABLED` | `true` | Enable the read-only web dashboard |
 | `WEB_UI_PORT` | `8080` | Port for the web dashboard |
+| `WEB_UI_USERNAME` | — | Enable HTTP Basic Auth for the dashboard, API, and metrics (set with `WEB_UI_PASSWORD`) |
+| `WEB_UI_PASSWORD` | — | Password for HTTP Basic Auth |
 | `DATA_PATH` | `/data` | Path inside container for SQLite database file |
 | `HISTORY_DAYS` | `30` | Days of backup history to import on first start |
 | `DATABASE_URL` | — | Database connection — see [Storage modes](#storage-modes) |
@@ -153,7 +155,9 @@ No extra configuration needed. PVEWatch connects to `PVE_HOST` and uses the clus
 
 ## Dashboard
 
-The web UI is read-only and requires no authentication. Open `http://your-docker-host:8080`.
+The web UI is read-only. Open `http://your-docker-host:8080`.
+
+By default there is no authentication. To require a login, set `WEB_UI_USERNAME` and `WEB_UI_PASSWORD` — this protects the dashboard, the JSON API, and `/metrics` with HTTP Basic Auth. The `/healthz` and `/readyz` probe endpoints stay open so Kubernetes probes keep working.
 
 - Summary stats: total VMs, backed-up count, failure events (with unresolved indicator), never-backed-up count
 - Per-VM backup heatmap with 3/5/7/14/30 day range selector
@@ -166,7 +170,7 @@ The web UI is read-only and requires no authentication. Open `http://your-docker
 
 ## API
 
-All endpoints are unauthenticated and served on the same port as the dashboard. Requests are handled concurrently.
+All endpoints are served on the same port as the dashboard and handled concurrently. If `WEB_UI_USERNAME` is set, they require HTTP Basic Auth (Prometheus supports this via `basic_auth` in the scrape config).
 
 ### `GET /api/status`
 

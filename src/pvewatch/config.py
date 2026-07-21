@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     # Web UI
     web_ui_enabled: bool = True
     web_ui_port: int = 8080
+    web_ui_username: str = ""
+    web_ui_password: str = ""
 
     # Data
     data_path: str = "/data"
@@ -55,6 +57,12 @@ class Settings(BaseSettings):
         if not 0 <= v <= 23:
             raise ValueError(f"digest_hour must be 0–23, got {v}")
         return v
+
+    @model_validator(mode="after")
+    def require_auth_pair(self) -> "Settings":
+        if bool(self.web_ui_username) != bool(self.web_ui_password):
+            raise ValueError("WEB_UI_USERNAME and WEB_UI_PASSWORD must be set together (or both left unset).")
+        return self
 
     @model_validator(mode="after")
     def require_alert_target(self) -> "Settings":

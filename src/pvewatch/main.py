@@ -145,9 +145,12 @@ def main() -> None:
         web_thread = threading.Thread(
             target=run_web_server,
             args=[web_conn, settings.pve_node, settings.web_ui_port],
+            kwargs={"username": settings.web_ui_username, "password": settings.web_ui_password},
             daemon=True,
         )
         web_thread.start()
+        if settings.web_ui_username:
+            log.info("Web UI basic auth enabled (user: %s)", settings.web_ui_username)
 
     def _shutdown(signum: int, frame: object) -> None:
         log.info("Shutting down...")
