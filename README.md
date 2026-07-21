@@ -386,6 +386,10 @@ Nothing is written to your Proxmox host. See [Storage modes](#storage-modes) for
 
 ---
 
+## Support
+
+PVEWatch is free and MIT-licensed. If it saves your backups one day, you can [buy me a coffee](https://ko-fi.com/markklass).
+
 ## AI disclosure
 
 I built this project with help from AI coding tools (Claude). I review, test, and maintain everything that goes in.
