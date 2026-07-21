@@ -611,7 +611,7 @@ _INDEX_TEMPLATE = """<!DOCTYPE html>
 </div>
 
 <div class="footer">
-  <a href="https://git.markklass.dev/markklass/pvewatch">PVEWatch</a>
+  <a href="https://github.com/ChristianKlass/pvewatch">PVEWatch</a>
 </div>
 
 <script>
