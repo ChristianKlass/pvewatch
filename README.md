@@ -386,6 +386,14 @@ Nothing is written to your Proxmox host. See [Storage modes](#storage-modes) for
 
 ---
 
+## Development
+
+```bash
+pip install -e ".[dev]"   # needs Python 3.11+
+pytest
+ruff check src/ tests/
+```
+
 ## Support
 
 PVEWatch is free and MIT-licensed. If it saves your backups one day, you can [buy me a coffee](https://ko-fi.com/markklass).
