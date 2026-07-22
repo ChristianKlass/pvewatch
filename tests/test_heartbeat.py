@@ -37,7 +37,7 @@ def quiet_cycle(monkeypatch):
 
 
 def test_heartbeat_fires_after_successful_cycle(monkeypatch, quiet_cycle):
-    get = MagicMock()
+    get = MagicMock(return_value=MagicMock(status_code=200))
     monkeypatch.setattr(main_mod.httpx, "get", get)
     settings = _settings(heartbeat_url="https://hc.example/ping/abc")
 
@@ -75,6 +75,27 @@ def test_heartbeat_failure_is_swallowed_and_logged(monkeypatch, caplog):
         _send_heartbeat(settings)  # must not raise
 
     assert any("heartbeat" in r.message.lower() for r in caplog.records)
+
+
+def test_heartbeat_non_2xx_response_is_logged(monkeypatch, caplog):
+    """httpx does not raise on 4xx/5xx, so a mistyped ping URL must still warn."""
+    monkeypatch.setattr(main_mod.httpx, "get", MagicMock(return_value=MagicMock(status_code=404)))
+    settings = _settings(heartbeat_url="https://hc.example/ping/wrong-uuid")
+
+    with caplog.at_level(logging.WARNING):
+        _send_heartbeat(settings)
+
+    assert any("404" in r.message or "404" in str(r.args) for r in caplog.records)
+
+
+def test_heartbeat_2xx_response_logs_nothing(monkeypatch, caplog):
+    monkeypatch.setattr(main_mod.httpx, "get", MagicMock(return_value=MagicMock(status_code=200)))
+    settings = _settings(heartbeat_url="https://hc.example/ping/abc")
+
+    with caplog.at_level(logging.WARNING):
+        _send_heartbeat(settings)
+
+    assert not caplog.records
 
 
 def test_heartbeat_noop_without_url(monkeypatch):

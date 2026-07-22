@@ -71,7 +71,9 @@ def _send_heartbeat(settings: Settings) -> None:
     if not settings.heartbeat_url:
         return
     try:
-        httpx.get(settings.heartbeat_url, timeout=5)
+        resp = httpx.get(settings.heartbeat_url, timeout=5)
+        if resp.status_code >= 400:
+            log.warning("Heartbeat ping returned HTTP %s", resp.status_code)
     except Exception as e:
         log.warning("Heartbeat ping failed: %s", e)
 
