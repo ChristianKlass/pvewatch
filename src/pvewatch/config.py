@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     # Thresholds
     storage_alert_threshold: int = 85
 
+    # Heartbeat
+    heartbeat_url: str = ""
+
     # Web UI
     web_ui_enabled: bool = True
     web_ui_port: int = 8080

@@ -7,6 +7,7 @@ import threading
 import time
 from uuid import uuid4
 
+import httpx
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
@@ -64,6 +65,17 @@ def _ensure_cluster(conn: Connection, settings: Settings) -> str:
     return cluster_id
 
 
+def _send_heartbeat(settings: Settings) -> None:
+    """Ping HEARTBEAT_URL after a successful cycle. A failed ping must never
+    break monitoring; the next cycle pings again, so no retry either."""
+    if not settings.heartbeat_url:
+        return
+    try:
+        httpx.get(settings.heartbeat_url, timeout=5)
+    except Exception as e:
+        log.warning("Heartbeat ping failed: %s", e)
+
+
 def _poll_cycle(client: ProxmoxClient, conn: Connection, cluster_id: str, settings: Settings) -> None:
     refresh_vm_names(client, conn, cluster_id)
     failed = poll_backup_tasks(client, conn, cluster_id)
@@ -73,6 +85,7 @@ def _poll_cycle(client: ProxmoxClient, conn: Connection, cluster_id: str, settin
         send_backup_failure_alert(conn, settings, task, vm_name)
     poll_storage(client, conn, cluster_id, settings)
     kv_set(conn, "last_poll_time", str(int(time.time())))
+    _send_heartbeat(settings)
 
 
 def main() -> None:

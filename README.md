@@ -145,6 +145,7 @@ No extra configuration needed. PVEWatch connects to `PVE_HOST` and uses the clus
 | `DIGEST_DAY` | `sunday` | Day to send the weekly digest |
 | `DIGEST_HOUR` | `9` | Hour to send the digest (0–23, container local time) |
 | `STORAGE_ALERT_THRESHOLD` | `85` | Storage usage % that triggers an alert |
+| `HEARTBEAT_URL` | — | URL pinged after each successful poll cycle, see [Heartbeat](#heartbeat--dead-mans-switch) |
 | `WEB_UI_ENABLED` | `true` | Enable the read-only web dashboard |
 | `WEB_UI_PORT` | `8080` | Port for the web dashboard |
 | `WEB_UI_USERNAME` | — | Enable HTTP Basic Auth for the dashboard, API, and metrics (set with `WEB_UI_PASSWORD`) |
@@ -152,6 +153,24 @@ No extra configuration needed. PVEWatch connects to `PVE_HOST` and uses the clus
 | `DATA_PATH` | `/data` | Path inside container for SQLite database file |
 | `HISTORY_DAYS` | `30` | Days of backup history to import on first start |
 | `DATABASE_URL` | — | Database connection, see [Storage modes](#storage-modes) |
+
+---
+
+## Heartbeat / dead-man's switch
+
+PVEWatch alerts you when something in your cluster breaks. But if PVEWatch itself dies (host down, container OOM, network partition), it obviously can't tell you. The heartbeat inverts the problem: PVEWatch pings an external service after every successful poll cycle, and that service alerts you when the pings stop.
+
+With [healthchecks.io](https://healthchecks.io) (free tier is plenty):
+
+```env
+HEARTBEAT_URL=https://hc-ping.com/your-uuid-here
+```
+
+Set the check's period to your `POLL_INTERVAL_MINUTES` plus a few minutes of grace. [Uptime Kuma](https://github.com/louislam/uptime-kuma) push monitors work the same way.
+
+A failed poll cycle sends no ping, so the silence also catches "container up but Proxmox unreachable". A failed ping is logged as a warning and never interrupts monitoring.
+
+**Where to run it:** for the dead-man's switch to mean anything, PVEWatch should not share fate with what it watches. Run it off-cluster if you can: a NAS, a Pi, a small VPS. If it runs on the cluster itself, the heartbeat still catches app crashes, but a full host outage takes the monitor down with everything else, and only the external service's missed ping will tell you.
 
 ---
 
