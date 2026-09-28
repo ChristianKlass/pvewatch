@@ -5,7 +5,6 @@ stages:
   - test
   - sonarqube
   - docker
-  - deploy
 
 variables:
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
@@ -74,59 +73,11 @@ docker-dev:
     - docker push "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA"
     - docker push "$CI_REGISTRY_IMAGE:dev"
 
-deploy:
-  stage: deploy
-  image:
-    name: bitnami/kubectl:latest
-    entrypoint: [""]
-  before_script: []
-  needs:
-    - docker-dev
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
-  environment:
-    name: production
-    kubernetes:
-      agent: homelab/infra:homelab
-  script:
-    # Build kubeconfig from service account token
-    - |
-      kubectl config set-cluster homelab --server="$K8S_SERVER" --insecure-skip-tls-verify=true
-      kubectl config set-credentials pvewatch-deployer --token="$K8S_TOKEN"
-      kubectl config set-context deploy --cluster=homelab --user=pvewatch-deployer
-      kubectl config use-context deploy
-    # Apply namespace, configmap, and service (idempotent)
-    - kubectl apply -f k8s/namespace.yaml
-    - kubectl apply -f k8s/configmap.yaml
-    - kubectl apply -f k8s/service.yaml
-    # Create/update imagePullSecret from a GitLab deploy token stored as CI variables
-    # (GITLAB_DEPLOY_TOKEN_USER / GITLAB_DEPLOY_TOKEN_TOKEN — read_registry scope)
-    - |
-      kubectl create secret docker-registry gitlab-registry \
-        --namespace=pvewatch \
-        --docker-server="$CI_REGISTRY" \
-        --docker-username="$GITLAB_DEPLOY_TOKEN_USER" \
-        --docker-password="$GITLAB_DEPLOY_TOKEN_TOKEN" \
-        --dry-run=client -o yaml | kubectl apply -f -
-    # Create/update secret from GitLab CI masked variables
-    - |
-      kubectl create secret generic pvewatch-secrets \
-        --namespace=pvewatch \
-        --from-literal=PVE_HOST="$PVE_HOST" \
-        --from-literal=PVE_NODE="$PVE_NODE" \
-        --from-literal=PVE_TOKEN_ID="$PVE_TOKEN_ID" \
-        --from-literal=PVE_TOKEN_SECRET="$PVE_TOKEN_SECRET" \
-        --from-literal=DATABASE_URL="$DATABASE_URL" \
-        --from-literal=ALERT_EMAIL_SMTP_HOST="$ALERT_EMAIL_SMTP_HOST" \
-        --from-literal=ALERT_EMAIL_SMTP_PORT="$ALERT_EMAIL_SMTP_PORT" \
-        --from-literal=ALERT_EMAIL_SMTP_USER="$ALERT_EMAIL_SMTP_USER" \
-        --from-literal=ALERT_EMAIL_SMTP_PASS="$ALERT_EMAIL_SMTP_PASS" \
-        --from-literal=ALERT_EMAIL_TO="$ALERT_EMAIL_TO" \
-        --from-literal=ALERT_EMAIL_FROM="$ALERT_EMAIL_FROM" \
-        --dry-run=client -o yaml | kubectl apply -f -
-    # Inject the image and apply the deployment
-    - sed "s|IMAGE_TAG|$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA|g" k8s/deployment.yaml | kubectl apply -f -
-    - kubectl rollout status deployment/pvewatch --namespace=pvewatch --timeout=120s
-
 # Public release images are built by GitHub Actions and pushed to GHCR
-# (.github/workflows/ci.yml); this pipeline only handles the homelab deploy.
+# (.github/workflows/ci.yml); deploy to the homelab now happens via Flux, not this pipeline.
+
+# The deploy job (kubectl apply via a pvewatch-deployer service-account token, --insecure-skip-tls-verify)
+# was removed 2026-09-28 (stage 4: one deploy path) -- Flux now applies k8s/pvewatch/ in the k8s repo
+# instead. The pvewatch-deployer service account and its CI variables (K8S_SERVER, K8S_TOKEN,
+# GITLAB_DEPLOY_TOKEN_USER/TOKEN, PVE_*, ALERT_EMAIL_*, DATABASE_URL) are cleaned up separately
+# once a Flux-driven rollout is proven (see k8s repo pvewatch MR).
