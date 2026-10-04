@@ -1,6 +1,10 @@
+import logging
 import sqlite3
 import time
+from collections.abc import Callable
 from pathlib import Path
+
+log = logging.getLogger("pvewatch.database")
 
 _MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 
@@ -8,9 +12,29 @@ _MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 class Connection:
     """Thin adapter over sqlite3.Connection or a psycopg2 connection."""
 
-    def __init__(self, raw, dialect: str) -> None:
+    def __init__(self, raw, dialect: str, reconnect: Callable[[], object] | None = None) -> None:
         self._raw = raw
         self._dialect = dialect  # "sqlite" | "postgres"
+        self._reconnect = reconnect  # postgres only: opens a fresh raw connection
+
+    def _closed(self) -> bool:
+        # psycopg2 sets .closed non-zero once the server side is gone; sqlite3 has no such attribute.
+        return bool(getattr(self._raw, "closed", 0))
+
+    def _live(self):
+        """Return the raw connection, reopening a postgres one that the server closed.
+
+        After a Postgres failover or restart the old socket is dead and psycopg2
+        marks it closed. Without this, every later call raised InterfaceError
+        ("connection already closed") until the process restarted, so polling
+        stopped and /readyz stayed 503. Only an already-closed connection is
+        replaced, so an open transaction is never dropped silently: the call that
+        hit the broken socket still raises, the next one gets a fresh connection.
+        """
+        if self._reconnect is not None and self._closed():
+            log.warning("Database connection was closed; reconnecting")
+            self._raw = self._reconnect()
+        return self._raw
 
     def _sql(self, sql: str) -> str:
         if self._dialect == "postgres":
@@ -19,14 +43,14 @@ class Connection:
 
     def execute(self, sql: str, params=()):
         if self._dialect == "postgres":
-            cur = self._raw.cursor()
+            cur = self._live().cursor()
             cur.execute(self._sql(sql), params)
             return cur
         return self._raw.execute(sql, params)
 
     def executemany(self, sql: str, params_seq):
         if self._dialect == "postgres":
-            cur = self._raw.cursor()
+            cur = self._live().cursor()
             cur.executemany(self._sql(sql), params_seq)
             return cur
         return self._raw.executemany(sql, params_seq)
@@ -35,6 +59,10 @@ class Connection:
         self._raw.commit()
 
     def rollback(self) -> None:
+        # A closed connection has no transaction left to roll back; raising here
+        # would turn every error handler into a second error.
+        if self._closed():
+            return
         self._raw.rollback()
 
     def close(self) -> None:
@@ -46,8 +74,10 @@ def connect(url_or_path: str) -> Connection:
         import psycopg2
         from psycopg2.extras import RealDictCursor
 
-        raw = psycopg2.connect(url_or_path, cursor_factory=RealDictCursor)
-        return Connection(raw, "postgres")
+        def _open():
+            return psycopg2.connect(url_or_path, cursor_factory=RealDictCursor)
+
+        return Connection(_open(), "postgres", reconnect=_open)
     # "memory" or ":memory:" → in-memory SQLite (no persistence, history re-pulled on restart)
     path = ":memory:" if url_or_path in ("memory", ":memory:") else url_or_path
     raw = sqlite3.connect(path, check_same_thread=False)
