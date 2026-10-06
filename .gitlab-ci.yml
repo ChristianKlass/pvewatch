@@ -1,5 +1,14 @@
 image: python:3.12
 
+# One pipeline per change: merge request pipelines while an MR is open, branch pipelines otherwise.
+# "Pipelines must succeed" checks the MR pipeline, so the gate jobs below must run in it.
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH
+
 stages:
   - lint
   - test
@@ -16,14 +25,40 @@ cache:
 before_script:
   - pip install --quiet -e ".[dev]" || pip install --quiet -e . pytest ruff
 
+# Leak gate (2026-10-06): GitHub mirrors this repo, so nothing private may reach main.
+# Secrets in the new commits (gitleaks) and Mark's LAN, internal hostnames and home paths
+# anywhere in the tree fail the pipeline; merges require a passing pipeline.
+leak-check:
+  stage: lint
+  rules:
+    - when: on_success
+  image:
+    name: zricethezav/gitleaks:v8.30.1
+    entrypoint: [""]
+  before_script: []
+  variables:
+    GIT_DEPTH: "0"
+  script:
+    - git config --global --add safe.directory "$CI_PROJECT_DIR"
+    - gitleaks git . --log-opts="${CI_MERGE_REQUEST_DIFF_BASE_SHA:-HEAD~1}..HEAD" --no-banner --redact
+    - |
+      if git grep -nIE '192\.168\.50\.[0-9]+|\.homelab\.internal|/home/mark|(git|registry)\.markklass\.dev' -- ':!.gitlab-ci.yml'; then
+        echo "Private infrastructure detail found above: remove it before merging"
+        exit 1
+      fi
+
 lint:
   stage: lint
+  rules:
+    - when: on_success
   script:
     - ruff check src/ tests/
     - ruff format --check src/ tests/
 
 test:
   stage: test
+  rules:
+    - when: on_success
   script:
     - python -m pytest tests/ -v --cov=pvewatch --cov-report=xml:coverage.xml
   artifacts:
@@ -69,15 +104,13 @@ docker-dev:
   before_script:
     - echo "$CI_JOB_TOKEN" | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin
   script:
-    - docker build -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA" -t "$CI_REGISTRY_IMAGE:dev" .
+    # main-<unixts>-<shortsha> sorts by build time, so Flux image automation can pick the newest
+    - TS="$(date +%s)"
+    - SORTABLE="main-${TS}-${CI_COMMIT_SHORT_SHA}"
+    - docker build -t "$CI_REGISTRY_IMAGE:$SORTABLE" -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA" -t "$CI_REGISTRY_IMAGE:dev" .
+    - docker push "$CI_REGISTRY_IMAGE:$SORTABLE"
     - docker push "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA"
     - docker push "$CI_REGISTRY_IMAGE:dev"
 
 # Public release images are built by GitHub Actions and pushed to GHCR
-# (.github/workflows/ci.yml); deploy to the homelab now happens via Flux, not this pipeline.
-
-# The deploy job (kubectl apply via a pvewatch-deployer service-account token, --insecure-skip-tls-verify)
-# was removed 2026-09-28 (stage 4: one deploy path) -- Flux now applies k8s/pvewatch/ in the k8s repo
-# instead. The pvewatch-deployer service account and its CI variables (K8S_SERVER, K8S_TOKEN,
-# GITLAB_DEPLOY_TOKEN_USER/TOKEN, PVE_*, ALERT_EMAIL_*, DATABASE_URL) are cleaned up separately
-# once a Flux-driven rollout is proven (see k8s repo pvewatch MR).
+# (.github/workflows/ci.yml). Deploys to the homelab happen via Flux, not this pipeline.
