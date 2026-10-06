@@ -41,8 +41,14 @@ leak-check:
   script:
     - git config --global --add safe.directory "$CI_PROJECT_DIR"
     - gitleaks git . --log-opts="${CI_MERGE_REQUEST_DIFF_BASE_SHA:-HEAD~1}..HEAD" --no-banner --redact
+    # The patterns live in the GitLab CI variable LEAK_PATTERNS, never in this file: GitHub
+    # mirrors the repo, so a pattern written here would publish what it is meant to block.
     - |
-      if git grep -nIE '192\.168\.50\.[0-9]+|\.homelab\.internal|/home/mark|(git|registry)\.markklass\.dev' -- ':!.gitlab-ci.yml'; then
+      if [ -z "$LEAK_PATTERNS" ]; then
+        echo "LEAK_PATTERNS is not set in GitLab CI variables: refusing to pass unchecked"
+        exit 1
+      fi
+      if git grep -nIE "$LEAK_PATTERNS"; then
         echo "Private infrastructure detail found above: remove it before merging"
         exit 1
       fi
