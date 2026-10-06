@@ -1,5 +1,14 @@
 image: python:3.12
 
+# One pipeline per change: merge request pipelines while an MR is open, branch pipelines otherwise.
+# "Pipelines must succeed" checks the MR pipeline, so the gate jobs below must run in it.
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH
+
 stages:
   - lint
   - test
@@ -21,6 +30,8 @@ before_script:
 # anywhere in the tree fail the pipeline; merges require a passing pipeline.
 leak-check:
   stage: lint
+  rules:
+    - when: on_success
   image:
     name: zricethezav/gitleaks:v8.30.1
     entrypoint: [""]
@@ -38,12 +49,16 @@ leak-check:
 
 lint:
   stage: lint
+  rules:
+    - when: on_success
   script:
     - ruff check src/ tests/
     - ruff format --check src/ tests/
 
 test:
   stage: test
+  rules:
+    - when: on_success
   script:
     - python -m pytest tests/ -v --cov=pvewatch --cov-report=xml:coverage.xml
   artifacts:
